@@ -243,7 +243,7 @@ class RustBuilder {
   }
 
   String _tomlString(String value) =>
-      path.absolute(value).replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+      value.replaceAll('\\', r'\\').replaceAll('"', r'\"');
 
   Future<Map<String, String>> _buildEnvironment() async {
     if (target.android != null) {
