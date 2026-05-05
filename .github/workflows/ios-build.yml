@@ -136,3 +136,38 @@ jobs:
             LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_LIBRARY_DIR}" \
             OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreMedia -framework CoreVideo -framework VideoToolbox" \
             build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+
+          artifact_root="$GITHUB_WORKSPACE/build/ios/unsigned-ipa"
+          payload_dir="$artifact_root/Payload"
+          ipa_path="$GITHUB_WORKSPACE/build/ios/gst-audio-flutter-ios-unsigned.ipa"
+
+          rm -rf "$artifact_root" "$ipa_path"
+          mkdir -p "$payload_dir"
+
+          app_path="$(
+            find "$GITHUB_WORKSPACE/build" "$HOME/Library/Developer/Xcode/DerivedData" \
+              -type d -path '*/Release-iphoneos/Runner.app' -print -quit 2>/dev/null || true
+          )"
+
+          if [[ -z "$app_path" ]]; then
+            echo "Runner.app was not found"
+            find "$GITHUB_WORKSPACE/build" "$HOME/Library/Developer/Xcode/DerivedData" \
+              -type d -name 'Runner.app' -print 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Packaging unsigned app at $app_path"
+          cp -R "$app_path" "$payload_dir/Runner.app"
+          (cd "$artifact_root" && /usr/bin/zip -qry "$ipa_path" Payload)
+          ls -lh "$ipa_path"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: gst-audio-flutter-ios-unsigned
+          path: build/ios/gst-audio-flutter-ios-unsigned.ipa
+          if-no-files-found: error
