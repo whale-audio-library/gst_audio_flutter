@@ -8,7 +8,7 @@ permissions:
 
 env:
   GSTREAMER_IOS_VERSION: 1.28.2
-  GSTREAMER_IOS_SHA256: e85fe53521ff5b5be3cfa6294befa77f21058c259c52dab5ba212e35af469d8b
+  GSTREAMER_IOS_XCFRAMEWORK_SHA256: c2e538da4430c73ac0fdf20db635dc342142cd401cf9e9b00b94dcbb9ccba542
 
 jobs:
   ios-no-codesign:
@@ -38,11 +38,11 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Cache GStreamer iOS SDK package
+      - name: Cache GStreamer iOS SDK
         uses: actions/cache@v5
         with:
           path: ~/.cache/gstreamer-ios
-          key: gstreamer-ios-${{ env.GSTREAMER_IOS_VERSION }}-${{ env.GSTREAMER_IOS_SHA256 }}
+          key: gstreamer-ios-xcframework-${{ env.GSTREAMER_IOS_VERSION }}-${{ env.GSTREAMER_IOS_XCFRAMEWORK_SHA256 }}
 
       - name: Install GStreamer iOS SDK
         run: |
@@ -51,39 +51,70 @@ jobs:
           cache_dir="$HOME/.cache/gstreamer-ios"
           mkdir -p "$cache_dir"
 
-          package_name="gstreamer-1.0-devel-${GSTREAMER_IOS_VERSION}-ios-universal.pkg"
-          package_path="$cache_dir/$package_name"
-          package_url="https://gstreamer.freedesktop.org/pkg/ios/${GSTREAMER_IOS_VERSION}/$package_name"
+          archive_name="gstreamer-${GSTREAMER_IOS_VERSION}-xcframework.tar.xz"
+          archive_path="$cache_dir/$archive_name"
+          archive_url="https://gstreamer.freedesktop.org/pkg/ios/${GSTREAMER_IOS_VERSION}/$archive_name"
+          extract_dir="$cache_dir/gstreamer-${GSTREAMER_IOS_VERSION}-xcframework"
 
-          if [[ ! -f "$package_path" ]]; then
+          if [[ ! -d "$extract_dir/GStreamer.xcframework" ]]; then
+            rm -rf "$extract_dir"
+            mkdir -p "$extract_dir"
             curl --fail --location --retry 5 --retry-delay 10 \
-              --output "$package_path" \
-              "$package_url"
+              --output "$archive_path" \
+              "$archive_url"
+            echo "${GSTREAMER_IOS_XCFRAMEWORK_SHA256}  ${archive_path}" | shasum --algorithm 256 --check -
+            tar -xJf "$archive_path" -C "$extract_dir"
+          else
+            echo "${GSTREAMER_IOS_XCFRAMEWORK_SHA256}  ${archive_path}" | shasum --algorithm 256 --check -
           fi
 
-          echo "${GSTREAMER_IOS_SHA256}  ${package_path}" | shasum --algorithm 256 --check -
-          installer -dumplog -verbose \
-            -pkg "$package_path" \
-            -target CurrentUserHomeDirectory
-
-          gstreamer_prefix="$HOME/Library/Developer/GStreamer/iPhone.sdk"
-          pkg_config_dir="$gstreamer_prefix/lib/pkgconfig"
-          if [[ ! -f "$pkg_config_dir/gstreamer-1.0.pc" || ! -f "$pkg_config_dir/glib-2.0.pc" ]]; then
-            find "$HOME/Library/Developer/GStreamer" -maxdepth 5 -type f -name '*.pc' -print || true
+          gstreamer_xcframework="$(find "$extract_dir" -maxdepth 4 -type d -name 'GStreamer.xcframework' -print -quit)"
+          if [[ -z "$gstreamer_xcframework" ]]; then
+            find "$extract_dir" -maxdepth 4 -print
             exit 1
           fi
 
+          ios_framework_path="$(find "$gstreamer_xcframework" -maxdepth 3 -type d -path '*/ios-arm64*/GStreamer.framework' ! -path '*simulator*' -print -quit)"
+          if [[ -z "$ios_framework_path" ]]; then
+            find "$gstreamer_xcframework" -maxdepth 4 -type d -name 'GStreamer.framework' -print
+            exit 1
+          fi
+          ios_framework_dir="$(dirname "$ios_framework_path")"
+
+          headers_dir="$ios_framework_dir/GStreamer.framework/Headers"
+          test -d "$headers_dir"
+
+          pkg_config_pc="$(find "$extract_dir" -type f -name 'gstreamer-1.0.pc' -print -quit)"
+          pkg_config_dir=""
+          if [[ -n "$pkg_config_pc" ]]; then
+            pkg_config_dir="$(dirname "$pkg_config_pc")"
+          fi
           {
-            echo "GSTREAMER_ROOT_IOS=$gstreamer_prefix"
-            echo "PKG_CONFIG_ALLOW_CROSS=1"
-            echo "PKG_CONFIG_PATH=$pkg_config_dir"
-            echo "PKG_CONFIG_LIBDIR=$pkg_config_dir"
+            echo "GSTREAMER_IOS_XCFRAMEWORK=$gstreamer_xcframework"
+            echo "GSTREAMER_IOS_FRAMEWORK_DIR=$ios_framework_dir"
           } >> "$GITHUB_ENV"
 
-          PKG_CONFIG_ALLOW_CROSS=1 \
-          PKG_CONFIG_PATH="$pkg_config_dir" \
-          PKG_CONFIG_LIBDIR="$pkg_config_dir" \
-            pkg-config --modversion glib-2.0 gstreamer-1.0 gstreamer-audio-1.0
+          if [[ -n "$pkg_config_dir" ]]; then
+            {
+              echo "PKG_CONFIG_ALLOW_CROSS=1"
+              echo "PKG_CONFIG_PATH=$pkg_config_dir"
+              echo "PKG_CONFIG_LIBDIR=$pkg_config_dir"
+            } >> "$GITHUB_ENV"
+
+            PKG_CONFIG_ALLOW_CROSS=1 \
+            PKG_CONFIG_PATH="$pkg_config_dir" \
+            PKG_CONFIG_LIBDIR="$pkg_config_dir" \
+              pkg-config --modversion glib-2.0 gstreamer-1.0
+          else
+            for dep in GLIB_2_0 GOBJECT_2_0 GIO_2_0 GSTREAMER_1_0; do
+              {
+                echo "SYSTEM_DEPS_${dep}_NO_PKG_CONFIG=1"
+                echo "SYSTEM_DEPS_${dep}_LIB_FRAMEWORK=GStreamer"
+                echo "SYSTEM_DEPS_${dep}_SEARCH_FRAMEWORK=$ios_framework_dir"
+                echo "SYSTEM_DEPS_${dep}_INCLUDE=$headers_dir"
+              } >> "$GITHUB_ENV"
+            done
+          fi
 
       - name: Get Flutter dependencies
         run: flutter pub get
@@ -106,4 +137,6 @@ jobs:
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
+            FRAMEWORK_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_FRAMEWORK_DIR}" \
+            OTHER_LDFLAGS="\$(inherited) -F${GSTREAMER_IOS_FRAMEWORK_DIR} -framework GStreamer" \
             build
