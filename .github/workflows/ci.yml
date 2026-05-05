@@ -87,6 +87,17 @@ jobs:
             pkg-config \
             xz-utils
 
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/local/lib/android/sdk/emulator \
+            /usr/local/lib/android/sdk/system-images
+          docker image prune -af || true
+          df -h
+
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
@@ -128,12 +139,12 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build Android debug APK
-        run: flutter build apk --debug --target-platform android-x64
+      - name: Build Android release APK
+        run: flutter build apk --release --target-platform android-x64
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: gst-audio-flutter-android-x64-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: gst-audio-flutter-android-x64-release
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
