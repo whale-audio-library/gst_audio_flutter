@@ -48,3 +48,6 @@ app.*.map.json
 
 # Rust
 **/target/
+
+# Generated integration-test media.
+/test-assets/generated/

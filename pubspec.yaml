@@ -64,6 +64,9 @@ flutter:
 
   assets:
     - test-assets/tone.wav
+    - test-assets/formats/tone.flac
+    - test-assets/formats/tone-vorbis.ogg
+    - test-assets/formats/tone-opus.ogg
 
   # To add assets to your application, add an assets section, like this:
   # assets:
