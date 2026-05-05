@@ -462,12 +462,21 @@ fn register_static_plugins() {
             ("playback", gst_plugin_playback_register),
             ("typefindfunctions", gst_plugin_typefindfunctions_register),
             ("audioconvert", gst_plugin_audioconvert_register),
+            ("audioparsers", gst_plugin_audioparsers_register),
             ("audioresample", gst_plugin_audioresample_register),
             ("volume", gst_plugin_volume_register),
             ("autodetect", gst_plugin_autodetect_register),
             ("osxaudio", gst_plugin_osxaudio_register),
             ("gio", gst_plugin_gio_register),
             ("wavparse", gst_plugin_wavparse_register),
+            ("id3demux", gst_plugin_id3demux_register),
+            ("isomp4", gst_plugin_isomp4_register),
+            ("matroska", gst_plugin_matroska_register),
+            ("ogg", gst_plugin_ogg_register),
+            ("vorbis", gst_plugin_vorbis_register),
+            ("opus", gst_plugin_opus_register),
+            ("flac", gst_plugin_flac_register),
+            ("icydemux", gst_plugin_icydemux_register),
             ("soup", gst_plugin_soup_register),
         ];
 
@@ -493,12 +502,21 @@ extern "C" {
     fn gst_plugin_playback_register() -> glib::ffi::gboolean;
     fn gst_plugin_typefindfunctions_register() -> glib::ffi::gboolean;
     fn gst_plugin_audioconvert_register() -> glib::ffi::gboolean;
+    fn gst_plugin_audioparsers_register() -> glib::ffi::gboolean;
     fn gst_plugin_audioresample_register() -> glib::ffi::gboolean;
     fn gst_plugin_volume_register() -> glib::ffi::gboolean;
     fn gst_plugin_autodetect_register() -> glib::ffi::gboolean;
     fn gst_plugin_osxaudio_register() -> glib::ffi::gboolean;
     fn gst_plugin_gio_register() -> glib::ffi::gboolean;
     fn gst_plugin_wavparse_register() -> glib::ffi::gboolean;
+    fn gst_plugin_id3demux_register() -> glib::ffi::gboolean;
+    fn gst_plugin_isomp4_register() -> glib::ffi::gboolean;
+    fn gst_plugin_matroska_register() -> glib::ffi::gboolean;
+    fn gst_plugin_ogg_register() -> glib::ffi::gboolean;
+    fn gst_plugin_vorbis_register() -> glib::ffi::gboolean;
+    fn gst_plugin_opus_register() -> glib::ffi::gboolean;
+    fn gst_plugin_flac_register() -> glib::ffi::gboolean;
+    fn gst_plugin_icydemux_register() -> glib::ffi::gboolean;
     fn gst_plugin_soup_register() -> glib::ffi::gboolean;
 }
 
@@ -515,6 +533,7 @@ struct GStreamerPlayer {
     playlist: Vec<Track>,
     current_index: Option<usize>,
     is_playing: bool,
+    want_playing: bool,
     volume: f64,
     muted: bool,
     speed: f64,
@@ -534,6 +553,7 @@ impl GStreamerPlayer {
         let playbin = gst::ElementFactory::make("playbin")
             .build()
             .map_err(|err| format!("failed to create playbin: {err}"))?;
+        playbin.set_property_from_str("flags", "audio+soft-volume+buffering");
         let (audio_sink, volume_element) = build_audio_sink(None, 1.0, false)?;
         playbin.set_property("audio-sink", &audio_sink);
 
@@ -542,6 +562,7 @@ impl GStreamerPlayer {
             playlist: Vec::new(),
             current_index: None,
             is_playing: false,
+            want_playing: false,
             volume: 1.0,
             muted: false,
             speed: 1.0,
@@ -670,10 +691,11 @@ impl GStreamerPlayer {
             self.stop_pipeline();
             return;
         };
+        let uri = track.uri.clone();
 
-        let was_playing = autoplay || self.is_playing;
-        let _ = self.playbin.set_state(gst::State::Ready);
-        self.playbin.set_property("uri", &track.uri);
+        let was_playing = autoplay || self.want_playing || self.is_playing;
+        self.stop_pipeline();
+        self.playbin.set_property("uri", &uri);
         self.last_error.clear();
 
         if was_playing {
@@ -688,13 +710,17 @@ impl GStreamerPlayer {
         }
 
         if self.current_index.is_some() {
+            self.want_playing = true;
             match self.playbin.set_state(gst::State::Playing) {
                 Ok(_) => {
                     self.is_playing = true;
-                    self.apply_speed_after_seek(self.current_position_ms());
+                    if (self.speed - 1.0).abs() >= f64::EPSILON {
+                        self.apply_speed_after_seek(self.current_position_ms());
+                    }
                     self.last_error.clear();
                 }
                 Err(err) => {
+                    self.want_playing = false;
                     self.is_playing = false;
                     self.last_error = format!("failed to start playback: {err}");
                 }
@@ -703,6 +729,7 @@ impl GStreamerPlayer {
     }
 
     fn pause_playback(&mut self) {
+        self.want_playing = false;
         match self.playbin.set_state(gst::State::Paused) {
             Ok(_) => {
                 self.is_playing = false;
@@ -713,6 +740,7 @@ impl GStreamerPlayer {
     }
 
     fn stop_pipeline(&mut self) {
+        self.want_playing = false;
         let _ = self.playbin.set_state(gst::State::Null);
         let _ = self.playbin.state(gst::ClockTime::from_seconds(2));
         self.is_playing = false;
@@ -874,7 +902,7 @@ impl GStreamerPlayer {
             self.muted,
         ) {
             Ok((sink, volume)) => {
-                let was_playing = self.is_playing;
+                let was_playing = self.want_playing || self.is_playing;
                 let position = self.current_position_ms();
                 let _ = self.playbin.set_state(gst::State::Ready);
                 self.playbin.set_property("audio-sink", &sink);
@@ -913,6 +941,7 @@ impl GStreamerPlayer {
             match message.view() {
                 gst::MessageView::Eos(_) => self.next_track(false),
                 gst::MessageView::Error(err) => {
+                    self.want_playing = false;
                     self.is_playing = false;
                     self.last_error = match err.debug() {
                         Some(debug) => format!("{} ({debug})", err.error()),
@@ -928,6 +957,21 @@ impl GStreamerPlayer {
                         .unwrap_or(false)
                     {
                         self.is_playing = state.current() == gst::State::Playing;
+                    }
+                }
+                gst::MessageView::Buffering(buffering) => {
+                    if buffering.percent() < 100 {
+                        if self.want_playing {
+                            let _ = self.playbin.set_state(gst::State::Paused);
+                        }
+                    } else if self.want_playing {
+                        let _ = self.playbin.set_state(gst::State::Playing);
+                    }
+                }
+                gst::MessageView::ClockLost(_) => {
+                    if self.want_playing {
+                        let _ = self.playbin.set_state(gst::State::Paused);
+                        let _ = self.playbin.set_state(gst::State::Playing);
                     }
                 }
                 gst::MessageView::DurationChanged(_) => {}
@@ -1043,7 +1087,11 @@ fn build_audio_sink(
         _ => gst::ElementFactory::make("openslessink")
             .build()
             .map_err(|err| format!("failed to create openslessink: {err}"))?,
-        #[cfg(not(target_os = "android"))]
+        #[cfg(target_os = "ios")]
+        _ => gst::ElementFactory::make("osxaudiosink")
+            .build()
+            .map_err(|err| format!("failed to create osxaudiosink: {err}"))?,
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         _ => gst::ElementFactory::make("autoaudiosink")
             .build()
             .map_err(|err| format!("failed to create autoaudiosink: {err}"))?,
