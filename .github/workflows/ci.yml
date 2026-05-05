@@ -53,6 +53,10 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Get cargokit build tool dependencies
+        run: dart pub get
+        working-directory: rust_builder/cargokit/build_tool
+
       - name: Analyze Flutter code
         run: flutter analyze
 
