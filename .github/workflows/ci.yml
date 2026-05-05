@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install system dependencies
         run: |
@@ -65,3 +65,75 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --manifest-path rust/Cargo.toml
+
+  android-apk:
+    name: Android APK build
+    runs-on: ubuntu-latest
+
+    env:
+      GSTREAMER_VERSION: 1.28.2
+      GSTREAMER_SHA256: ba9f1c6e10f0736fbf48cd741634fa90e49d50c961a4454230040b2517490d2a
+      GSTREAMER_ROOT_ANDROID: ${{ github.workspace }}/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            xz-utils
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.6
+          cache: true
+
+      - name: Cache GStreamer Android SDK
+        id: cache-gstreamer-android
+        uses: actions/cache@v5
+        with:
+          path: .cache/gstreamer-android/gstreamer-1.0-android-universal-${{ env.GSTREAMER_VERSION }}
+          key: gstreamer-android-${{ env.GSTREAMER_VERSION }}-${{ env.GSTREAMER_SHA256 }}
+
+      - name: Download GStreamer Android SDK
+        if: steps.cache-gstreamer-android.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache/gstreamer-android
+          cd .cache/gstreamer-android
+          curl -fsSLO "https://gstreamer.freedesktop.org/pkg/android/${GSTREAMER_VERSION}/gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz"
+          echo "${GSTREAMER_SHA256}  gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz" | sha256sum -c -
+          mkdir -p "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}"
+          tar -xJf "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz" \
+            -C "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}"
+          rm "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz"
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug --target-platform android-x64
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: gst-audio-flutter-android-x64-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
