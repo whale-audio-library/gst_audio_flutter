@@ -106,7 +106,7 @@ jobs:
           for dep in GLIB_2_0 GOBJECT_2_0 GIO_2_0 GSTREAMER_1_0; do
             {
               echo "SYSTEM_DEPS_${dep}_NO_PKG_CONFIG=1"
-              echo "SYSTEM_DEPS_${dep}_LIB=static=GStreamer"
+              echo "SYSTEM_DEPS_${dep}_LIB=GStreamer"
               echo "SYSTEM_DEPS_${dep}_SEARCH_NATIVE=$ios_library_dir"
               echo "SYSTEM_DEPS_${dep}_INCLUDE=$include_paths"
             } >> "$GITHUB_ENV"
@@ -134,5 +134,5 @@ jobs:
             PROVISIONING_PROFILE="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_LIBRARY_DIR}" \
-            OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AudioToolbox -framework CoreAudio -framework CoreMedia -framework CoreVideo -framework VideoToolbox" \
+            OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreMedia -framework CoreVideo -framework VideoToolbox" \
             build
