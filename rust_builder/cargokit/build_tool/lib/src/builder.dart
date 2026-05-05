@@ -221,20 +221,25 @@ class RustBuilder {
     ].join('\n');
 
     final packageSection = RegExp(
-      r'(?ms)^\[package\]\s*$.*?(?=^\[|\z)',
+      r'^\[package\]\s*$[\s\S]*?(?=^\[|$(?![\s\S]))',
+      multiLine: true,
     );
     final withBuildScript = manifest.replaceFirstMapped(
       packageSection,
       (match) {
         final section = match.group(0)!;
-        if (buildScript.isEmpty || RegExp(r'(?m)^build\s*=').hasMatch(section)) {
+        if (buildScript.isEmpty ||
+            RegExp(r'^build\s*=', multiLine: true).hasMatch(section)) {
           return section;
         }
         return section.replaceFirst('\n', '\n$buildScript');
       },
     );
 
-    final libSection = RegExp(r'(?ms)^\[lib\]\s*$.*?(?=^\[|\z)');
+    final libSection = RegExp(
+      r'^\[lib\]\s*$[\s\S]*?(?=^\[|$(?![\s\S]))',
+      multiLine: true,
+    );
     if (libSection.hasMatch(withBuildScript)) {
       return withBuildScript.replaceFirst(libSection, staticlibLibSection);
     }
