@@ -39,6 +39,12 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GSTREAMER_ANDROID_ABI");
     println!("cargo:rerun-if-env-changed=TARGET");
 
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {
+        // GStreamer iOS bundles GIO resolver objects that need libresolv.
+        println!("cargo:rustc-link-lib=resolv");
+        return;
+    }
+
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("android") {
         return;
     }

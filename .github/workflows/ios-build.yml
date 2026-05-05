@@ -134,5 +134,5 @@ jobs:
             PROVISIONING_PROFILE="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
             LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_LIBRARY_DIR}" \
-            OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_LIBRARY_DIR} -lGStreamer" \
+            OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_LIBRARY_DIR} -lGStreamer -lresolv" \
             build
