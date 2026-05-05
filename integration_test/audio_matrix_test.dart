@@ -47,23 +47,14 @@ void main() {
       final result = await _playAndObserve(testCase);
       final state = result.state;
       expect(state.currentUri, testCase.uri, reason: testCase.label);
-      expect(
+      expectTrue(
         result.sawPlaybackActivity,
-        isTrue,
-        reason: '${testCase.label} should start decoding without stalling',
+        '${testCase.label} should start decoding without stalling',
       );
       if (state.durationMs > 0) {
-        expect(
-          state.durationMs,
-          greaterThanOrEqualTo(testCase.minDurationMs),
-          reason: testCase.label,
-        );
+        expectAtLeast(state.durationMs, testCase.minDurationMs, testCase.label);
       }
-      expect(
-        state.bufferingPercent,
-        inInclusiveRange(0, 100),
-        reason: testCase.label,
-      );
+      expectPercent(state.bufferingPercent, testCase.label);
       await player.stop();
     }
   });
@@ -100,23 +91,14 @@ void main() {
       expect(state.currentUri, testCase.uri, reason: testCase.label);
       expect(state.currentIndex, 0, reason: testCase.label);
       expect(state.lastError, isEmpty, reason: testCase.label);
-      expect(
-        state.bufferingPercent,
-        inInclusiveRange(0, 100),
-        reason: testCase.label,
-      );
+      expectPercent(state.bufferingPercent, testCase.label);
       if (state.durationMs > 0) {
-        expect(
-          state.durationMs,
-          greaterThanOrEqualTo(testCase.minDurationMs),
-          reason: testCase.label,
-        );
+        expectAtLeast(state.durationMs, testCase.minDurationMs, testCase.label);
       }
       if (testCase.expectPartialBuffer) {
-        expect(
+        expectTrue(
           result.sawPartialBuffer,
-          isTrue,
-          reason: '${testCase.label} should expose partial HTTP buffering',
+          '${testCase.label} should expose partial HTTP buffering. Samples: ${result.bufferSamples}',
         );
       }
       await player.stop();
@@ -147,12 +129,15 @@ void main() {
         break;
       }
     }
-    expect(interruptedState.currentUri, contains('/drop/'));
-    expect(interruptedState.bufferingPercent, inInclusiveRange(0, 100));
+    expectTrue(
+      interruptedState.currentUri.contains('/drop/'),
+      'interrupted transfer should remain on drop fixture',
+    );
+    expectPercent(interruptedState.bufferingPercent, 'interrupted transfer');
     await player.stop();
 
     final stoppedState = await player.getState();
-    expect(stoppedState.isBuffering, isFalse);
+    expectTrue(!stoppedState.isBuffering, 'stopped player should not buffer');
 
     final recoveredState = await _playAndWaitForProgress(
       const _AudioCase(
@@ -162,7 +147,10 @@ void main() {
       ),
     );
     expect(recoveredState.lastError, isEmpty);
-    expect(recoveredState.positionMs, greaterThan(0));
+    expectTrue(
+      recoveredState.positionMs > 0,
+      'recovery fixture should make playback progress',
+    );
   });
 
   testWidgets('survives rapid playlist switches across HTTP formats', (
@@ -218,11 +206,13 @@ class _ObservedState {
     required this.state,
     required this.sawPartialBuffer,
     required this.sawPlaybackActivity,
+    required this.bufferSamples,
   });
 
   final player.PlaybackState state;
   final bool sawPartialBuffer;
   final bool sawPlaybackActivity;
+  final List<int> bufferSamples;
 }
 
 Future<player.PlaybackState> _playAndWaitForProgress(
@@ -238,8 +228,10 @@ Future<_ObservedState> _playAndObserve(_AudioCase testCase) async {
   await player.play();
 
   var bestState = await player.getState();
-  var sawPartialBuffer = bestState.sawPartialBuffer;
+  var sawPartialBuffer =
+      bestState.bufferingPercent > 0 && bestState.bufferingPercent < 100;
   var sawPlaybackActivity = _hasPlaybackActivity(bestState, testCase.uri);
+  final bufferSamples = <int>[];
   final deadline = DateTime.now().add(const Duration(seconds: 6));
   while (DateTime.now().isBefore(deadline)) {
     await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -248,8 +240,11 @@ Future<_ObservedState> _playAndObserve(_AudioCase testCase) async {
       fail('${testCase.label}: ${state.lastError}');
     }
     if (state.currentUri == testCase.uri) {
+      bufferSamples.add(state.bufferingPercent);
       bestState = _moreInformativeState(bestState, state);
-      sawPartialBuffer = sawPartialBuffer || state.sawPartialBuffer;
+      sawPartialBuffer =
+          sawPartialBuffer ||
+          state.bufferingPercent > 0 && state.bufferingPercent < 100;
       sawPlaybackActivity =
           sawPlaybackActivity || _hasPlaybackActivity(state, testCase.uri);
     }
@@ -263,6 +258,7 @@ Future<_ObservedState> _playAndObserve(_AudioCase testCase) async {
     state: bestState,
     sawPartialBuffer: sawPartialBuffer,
     sawPlaybackActivity: sawPlaybackActivity,
+    bufferSamples: bufferSamples,
   );
 }
 
@@ -298,9 +294,32 @@ Future<player.PlaybackState> _waitForPlaybackProgress(
   }
 
   expect(state.lastError, isEmpty);
-  expect(state.positionMs > 0 || state.isPlaying, isTrue);
-  expect(state.durationMs, greaterThan(0));
+  expectTrue(
+    state.positionMs > 0 || state.isPlaying,
+    'playback should either advance or report playing',
+  );
+  expectTrue(state.durationMs > 0, 'duration should be known');
   return state;
+}
+
+void expectTrue(bool value, String reason) {
+  expect(value, true, reason: reason);
+}
+
+void expectAtLeast(int actual, int minimum, String reason) {
+  expect(
+    actual >= minimum,
+    true,
+    reason: '$reason: expected $actual to be >= $minimum',
+  );
+}
+
+void expectPercent(int value, String reason) {
+  expect(
+    value >= 0 && value <= 100,
+    true,
+    reason: '$reason: expected buffering percent in 0..100, got $value',
+  );
 }
 
 player.PlaybackState _moreInformativeState(

@@ -1,8 +1,10 @@
 use std::{
+    env,
     path::Path,
     sync::{
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, Sender, TryRecvError},
-        Mutex, OnceLock,
+        Arc, Mutex, OnceLock,
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -12,9 +14,6 @@ use gio::prelude::*;
 use gst::prelude::*;
 use gstreamer as gst;
 use rand::Rng;
-
-#[cfg(any(target_os = "ios", target_os = "windows"))]
-use std::env;
 
 #[derive(Clone, Debug)]
 pub struct Track {
@@ -412,7 +411,7 @@ fn configure_platform_gstreamer_runtime() {
     }
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 fn configure_platform_gstreamer_runtime() {
     let tmp_dir = env::temp_dir();
     set_env_path_if_missing("TMP", &tmp_dir);
@@ -423,10 +422,10 @@ fn configure_platform_gstreamer_runtime() {
     set_env_path_if_missing("HOME", &tmp_dir);
 }
 
-#[cfg(not(any(target_os = "ios", target_os = "windows")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_os = "windows")))]
 fn configure_platform_gstreamer_runtime() {}
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 fn set_env_path_if_missing(key: &str, value: &Path) {
     if env::var_os(key).is_none() {
         env::set_var(key, value);
@@ -549,6 +548,8 @@ struct GStreamerPlayer {
     fade: Option<FadeState>,
     buffering_percent: i32,
     is_buffering: bool,
+    downloaded_bytes: Arc<AtomicU64>,
+    download_total_bytes: Option<u64>,
     last_error: String,
 }
 
@@ -557,7 +558,27 @@ impl GStreamerPlayer {
         let playbin = gst::ElementFactory::make("playbin")
             .build()
             .map_err(|err| format!("failed to create playbin: {err}"))?;
-        playbin.set_property_from_str("flags", "audio+soft-volume+buffering");
+        playbin.set_property_from_str("flags", "audio+soft-volume+buffering+download");
+        let downloaded_bytes = Arc::new(AtomicU64::new(0));
+        let probe_downloaded_bytes = Arc::clone(&downloaded_bytes);
+        playbin.connect("source-setup", false, move |values| {
+            if let Some(source) = values
+                .get(1)
+                .and_then(|value| value.get::<gst::Element>().ok())
+            {
+                install_download_probe(&source, &probe_downloaded_bytes);
+            }
+            None
+        });
+        playbin.connect("element-setup", false, move |values| {
+            if let Some(element) = values
+                .get(1)
+                .and_then(|value| value.get::<gst::Element>().ok())
+            {
+                configure_download_buffer(&element);
+            }
+            None
+        });
         let (audio_sink, volume_element) = build_audio_sink(None, 1.0, false)?;
         playbin.set_property("audio-sink", &audio_sink);
 
@@ -580,6 +601,8 @@ impl GStreamerPlayer {
             fade: None,
             buffering_percent: 100,
             is_buffering: false,
+            downloaded_bytes,
+            download_total_bytes: None,
             last_error: String::new(),
         })
     }
@@ -752,6 +775,7 @@ impl GStreamerPlayer {
         let _ = self.playbin.state(gst::ClockTime::from_seconds(2));
         self.is_playing = false;
         self.is_buffering = false;
+        self.reset_download_tracking();
         self.buffering_percent = 100;
     }
 
@@ -971,7 +995,6 @@ impl GStreamerPlayer {
                 }
                 gst::MessageView::Buffering(buffering) => {
                     let percent = buffering.percent().clamp(0, 100);
-                    self.buffering_percent = percent;
                     if percent < 100 {
                         self.is_buffering = true;
                         if self.want_playing {
@@ -982,6 +1005,11 @@ impl GStreamerPlayer {
                         let _ = self.playbin.set_state(gst::State::Playing);
                     } else {
                         self.is_buffering = false;
+                    }
+                }
+                gst::MessageView::Element(element) => {
+                    if let Some(structure) = element.message().structure() {
+                        self.update_http_download_total(structure);
                     }
                 }
                 gst::MessageView::ClockLost(_) => {
@@ -1000,6 +1028,7 @@ impl GStreamerPlayer {
         self.poll_bus();
         let position_ms = self.current_position_ms();
         let duration_ms = self.current_duration_ms();
+        let buffering_percent = self.current_buffering_percent();
         let (current_uri, current_title) = self
             .current_track()
             .map(|track| (track.uri.clone(), track.title.clone()))
@@ -1013,7 +1042,7 @@ impl GStreamerPlayer {
             is_playing: self.is_playing,
             position_ms,
             duration_ms,
-            buffering_percent: self.buffering_percent,
+            buffering_percent,
             is_buffering: self.is_buffering,
             volume: self.volume,
             muted: self.muted,
@@ -1086,9 +1115,170 @@ impl GStreamerPlayer {
             .unwrap_or(0)
     }
 
+    fn current_buffering_percent(&mut self) -> i32 {
+        let is_http = self
+            .current_track()
+            .map(|track| is_http_uri(&track.uri))
+            .unwrap_or(false);
+        if !is_http {
+            return 100;
+        }
+
+        if let Some(percent) = self.current_transfer_percent() {
+            self.buffering_percent = self.buffering_percent.max(percent).clamp(0, 100);
+        }
+
+        self.buffering_percent
+    }
+
+    fn current_transfer_percent(&self) -> Option<i32> {
+        let total_bytes = self.download_total_bytes?;
+        if total_bytes == 0 {
+            return None;
+        }
+
+        let downloaded_bytes = self.downloaded_bytes.load(Ordering::Relaxed);
+        if downloaded_bytes == 0 {
+            return None;
+        }
+
+        let percent = downloaded_bytes.min(total_bytes).saturating_mul(100) / total_bytes;
+        Some(percent as i32)
+    }
+
     fn reset_buffering_for_uri(&mut self, uri: &str) {
+        self.reset_download_tracking();
         self.buffering_percent = if is_http_uri(uri) { 0 } else { 100 };
         self.is_buffering = false;
+    }
+
+    fn reset_download_tracking(&mut self) {
+        self.downloaded_bytes.store(0, Ordering::Relaxed);
+        self.download_total_bytes = None;
+    }
+
+    fn update_http_download_total(&mut self, structure: &gst::StructureRef) {
+        if !structure.has_name("http-headers") {
+            return;
+        }
+
+        let is_current_http = self
+            .current_track()
+            .map(|track| is_http_uri(&track.uri))
+            .unwrap_or(false);
+        if !is_current_http {
+            return;
+        }
+
+        let Ok(response_headers) = structure.get::<gst::Structure>("response-headers") else {
+            return;
+        };
+        let Some(total_bytes) = http_content_total(response_headers.as_ref()) else {
+            return;
+        };
+
+        self.download_total_bytes = Some(total_bytes);
+    }
+}
+
+fn install_download_probe(element: &gst::Element, downloaded_bytes: &Arc<AtomicU64>) -> bool {
+    if is_http_source_element(element) {
+        return install_download_probe_on_source(element, downloaded_bytes);
+    }
+
+    if let Some(bin) = element.dynamic_cast_ref::<gst::Bin>() {
+        for child in bin.iterate_recurse().into_iter().flatten() {
+            configure_download_buffer(&child);
+            if install_download_probe(&child, downloaded_bytes) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+fn is_http_source_element(element: &gst::Element) -> bool {
+    let factory_name = element
+        .factory()
+        .map(|factory| factory.name().to_string())
+        .unwrap_or_default();
+    if matches!(factory_name.as_str(), "souphttpsrc" | "neonhttpsrc") {
+        return true;
+    }
+
+    if element.find_property("location").is_none() {
+        return false;
+    }
+
+    element
+        .property::<Option<String>>("location")
+        .as_deref()
+        .map(is_http_uri)
+        .unwrap_or(false)
+}
+
+fn install_download_probe_on_source(
+    element: &gst::Element,
+    downloaded_bytes: &Arc<AtomicU64>,
+) -> bool {
+    let Some(src_pad) = element.static_pad("src") else {
+        return false;
+    };
+
+    let probe_downloaded_bytes = Arc::clone(downloaded_bytes);
+    src_pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+        if let Some(buffer) = info.buffer() {
+            probe_downloaded_bytes.fetch_add(buffer.size() as u64, Ordering::Relaxed);
+        }
+        gst::PadProbeReturn::Ok
+    });
+    true
+}
+
+fn configure_download_buffer(element: &gst::Element) {
+    if element
+        .factory()
+        .map(|factory| factory.name().to_string())
+        .as_deref()
+        != Some("downloadbuffer")
+    {
+        return;
+    }
+
+    let temp_template = env::temp_dir().join("gst-audio-download-XXXXXX");
+    if let Some(template) = temp_template.to_str() {
+        element.set_property("temp-template", template);
+    }
+}
+
+fn http_content_total(headers: &gst::StructureRef) -> Option<u64> {
+    http_header_value(headers, "Content-Range")
+        .and_then(|value| parse_content_range_total(&value))
+        .or_else(|| {
+            http_header_value(headers, "Content-Length")
+                .and_then(|value| value.trim().parse::<u64>().ok())
+        })
+}
+
+fn http_header_value(headers: &gst::StructureRef, name: &str) -> Option<String> {
+    if let Ok(value) = headers.get::<String>(name) {
+        return Some(value);
+    }
+
+    headers
+        .iter()
+        .find(|(field, _)| field.as_str().eq_ignore_ascii_case(name))
+        .and_then(|(_, value)| value.get::<String>().ok())
+}
+
+fn parse_content_range_total(value: &str) -> Option<u64> {
+    let (_, total) = value.rsplit_once('/')?;
+    let total = total.trim();
+    if total == "*" {
+        None
+    } else {
+        total.parse::<u64>().ok()
     }
 }
 

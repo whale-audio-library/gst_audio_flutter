@@ -721,7 +721,11 @@ class _HttpBufferProgress extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme;
     final value = percent.clamp(0, 100) / 100.0;
-    final status = buffering ? 'Buffering' : 'Buffered';
+    final status = buffering
+        ? 'Buffering'
+        : percent >= 100
+        ? 'Buffered'
+        : 'Downloading';
 
     return Semantics(
       label: 'HTTP buffer',
