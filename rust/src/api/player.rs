@@ -717,6 +717,7 @@ impl GStreamerPlayer {
 
     fn stop_pipeline(&mut self) {
         let _ = self.playbin.set_state(gst::State::Null);
+        let _ = self.playbin.state(gst::ClockTime::from_seconds(2));
         self.is_playing = false;
     }
 

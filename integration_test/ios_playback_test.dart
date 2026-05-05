@@ -12,7 +12,9 @@ void main() {
   });
 
   tearDownAll(() async {
+    await player.stop();
     await player.shutdownPlayer();
+    await Future<void>.delayed(const Duration(seconds: 1));
   });
 
   testWidgets('plays bundled WAV through Rust GStreamer on iOS', (
