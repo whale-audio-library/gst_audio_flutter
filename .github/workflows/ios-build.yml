@@ -87,28 +87,27 @@ jobs:
             exit 1
           fi
 
-          ios_framework_path="$(find "$gstreamer_xcframework" -maxdepth 3 -type d -path '*/ios-arm64*/GStreamer.framework' ! -path '*simulator*' -print -quit)"
-          if [[ -z "$ios_framework_path" ]]; then
-            find "$gstreamer_xcframework" -maxdepth 4 -type d -name 'GStreamer.framework' -print
+          ios_library_dir="$gstreamer_xcframework/ios-arm64"
+          if [[ ! -f "$ios_library_dir/libGStreamer.a" ]]; then
+            find "$gstreamer_xcframework" -maxdepth 3 -type f -name 'libGStreamer.a' -print
             exit 1
           fi
-          ios_framework_dir="$(dirname "$ios_framework_path")"
 
-          headers_dir="$ios_framework_dir/Headers"
+          headers_dir="$ios_library_dir/Headers"
           test -d "$headers_dir"
           include_paths="$headers_dir:$headers_dir/glib-2.0:$headers_dir/gstreamer-1.0:$headers_dir/arm64"
-          echo "Using GStreamer iOS framework at $ios_framework_dir"
+          echo "Using GStreamer iOS static library at $ios_library_dir"
 
           {
             echo "GSTREAMER_IOS_XCFRAMEWORK=$gstreamer_xcframework"
-            echo "GSTREAMER_IOS_FRAMEWORK_DIR=$ios_framework_dir"
+            echo "GSTREAMER_IOS_LIBRARY_DIR=$ios_library_dir"
           } >> "$GITHUB_ENV"
 
           for dep in GLIB_2_0 GOBJECT_2_0 GIO_2_0 GSTREAMER_1_0; do
             {
               echo "SYSTEM_DEPS_${dep}_NO_PKG_CONFIG=1"
-              echo "SYSTEM_DEPS_${dep}_LIB_FRAMEWORK=GStreamer"
-              echo "SYSTEM_DEPS_${dep}_SEARCH_FRAMEWORK=$ios_framework_dir"
+              echo "SYSTEM_DEPS_${dep}_LIB=static=GStreamer"
+              echo "SYSTEM_DEPS_${dep}_SEARCH_NATIVE=$ios_library_dir"
               echo "SYSTEM_DEPS_${dep}_INCLUDE=$include_paths"
             } >> "$GITHUB_ENV"
           done
@@ -134,6 +133,6 @@ jobs:
             DEVELOPMENT_TEAM="" \
             PROVISIONING_PROFILE="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            FRAMEWORK_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_FRAMEWORK_DIR}" \
-            OTHER_LDFLAGS="\$(inherited) -F${GSTREAMER_IOS_FRAMEWORK_DIR} -framework GStreamer" \
+            LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_LIBRARY_DIR}" \
+            OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_LIBRARY_DIR} -lGStreamer" \
             build
