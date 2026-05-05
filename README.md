@@ -12,6 +12,8 @@ For cross-platform GStreamer usage, setup, packaging status, and common issues, 
 
 For Android-only SDK/static-plugin/APK details, see [docs/gstreamer-android-guide.md](docs/gstreamer-android-guide.md).
 
+For iOS SDK, unsigned IPA packaging, simulator integration tests, and true-device troubleshooting, see [docs/gstreamer-ios-guide.md](docs/gstreamer-ios-guide.md).
+
 ## Toolchain
 
 - Flutter SDK used here: `/home/chrome-book/fvm/versions/3.41.6/bin/flutter`
