@@ -63,7 +63,7 @@ jobs:
               --output "$archive_path" \
               "$archive_url"
             echo "${GSTREAMER_IOS_XCFRAMEWORK_SHA256}  ${archive_path}" | shasum --algorithm 256 --check -
-            df -h "$HOME"
+            df -h "$HOME" || true
             tar -xJf "$archive_path" -C "$extract_dir" \
               GStreamer.xcframework/Info.plist \
               GStreamer.xcframework/ios-arm64 || {
