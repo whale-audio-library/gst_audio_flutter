@@ -36,5 +36,22 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Generate iOS build configuration
+        run: flutter build ios --release --config-only --no-codesign
+
       - name: Build iOS without codesign
-        run: flutter build ios --release --no-codesign
+        run: |
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            build
