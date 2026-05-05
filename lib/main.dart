@@ -1,0 +1,719 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:gst_audio_flutter/src/rust/api/player.dart' as player;
+import 'package:gst_audio_flutter/src/rust/frb_generated.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await RustLib.init();
+  runApp(const AudioPlayerApp());
+}
+
+class AudioPlayerApp extends StatelessWidget {
+  const AudioPlayerApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'GStreamer Audio',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xff26706f),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+        sliderTheme: const SliderThemeData(
+          showValueIndicator: ShowValueIndicator.onDrag,
+        ),
+      ),
+      home: const PlayerPage(),
+    );
+  }
+}
+
+class PlayerPage extends StatefulWidget {
+  const PlayerPage({super.key});
+
+  @override
+  State<PlayerPage> createState() => _PlayerPageState();
+}
+
+class _PlayerPageState extends State<PlayerPage> {
+  final _queueController = TextEditingController();
+  final _newItemController = TextEditingController();
+  final _manualSeekController = TextEditingController(text: '0');
+  final _queueFocus = FocusNode();
+
+  player.PlaybackState? _state;
+  List<player.AudioOutputDevice> _devices = const [];
+  Timer? _pollTimer;
+  bool _busy = false;
+  bool _draggingSeek = false;
+  double _seekMs = 0;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshAll();
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!_busy && !_draggingSeek) {
+        _refreshState();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    _queueController.dispose();
+    _newItemController.dispose();
+    _manualSeekController.dispose();
+    _queueFocus.dispose();
+    player.shutdownPlayer();
+    super.dispose();
+  }
+
+  Future<void> _run(Future<player.PlaybackState> Function() action) async {
+    setState(() {
+      _busy = true;
+      _error = '';
+    });
+    try {
+      final nextState = await action();
+      if (!mounted) return;
+      setState(() {
+        _state = nextState;
+        _seekMs = nextState.positionMs.toDouble();
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await _refreshState();
+    try {
+      final devices = await player.listOutputDevices();
+      if (mounted) {
+        setState(() => _devices = devices);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error.toString());
+      }
+    }
+  }
+
+  Future<void> _refreshState() async {
+    try {
+      final nextState = await player.getState();
+      if (!mounted) return;
+      setState(() {
+        _state = nextState;
+        if (!_draggingSeek) {
+          _seekMs = nextState.positionMs.toDouble();
+        }
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = error.toString());
+      }
+    }
+  }
+
+  List<String> _queueItems() {
+    return _queueController.text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<void> _loadQueue({int startIndex = 0}) async {
+    await _run(
+      () => player.setPlaylist(inputs: _queueItems(), startIndex: startIndex),
+    );
+  }
+
+  Future<void> _appendItem() async {
+    final value = _newItemController.text.trim();
+    if (value.isEmpty) return;
+    final current = _queueController.text.trimRight();
+    _queueController.text = current.isEmpty ? value : '$current\n$value';
+    _newItemController.clear();
+    await _loadQueue(startIndex: _state?.currentIndex ?? 0);
+  }
+
+  String _formatTime(num milliseconds) {
+    final value = Duration(
+      milliseconds: milliseconds.round().clamp(0, 1 << 62),
+    );
+    final hours = value.inHours;
+    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (hours > 0) {
+      return '$hours:$minutes:$seconds';
+    }
+    return '${value.inMinutes}:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _state;
+    final color = Theme.of(context).colorScheme;
+    final durationMs = (state?.durationMs ?? 0)
+        .toDouble()
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    final positionMs = _seekMs
+        .clamp(0.0, durationMs > 0 ? durationMs : _seekMs)
+        .toDouble();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('GStreamer Audio'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _refreshAll,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 900;
+            final queuePane = _QueuePane(
+              queueController: _queueController,
+              newItemController: _newItemController,
+              queueFocus: _queueFocus,
+              playlist: state?.playlist ?? const [],
+              currentIndex: state?.currentIndex ?? -1,
+              onLoad: () => _loadQueue(),
+              onAppend: _appendItem,
+              onPlayIndex: (index) =>
+                  _run(() => player.playIndex(index: index)),
+            );
+
+            final controlPane = _ControlPane(
+              state: state,
+              devices: _devices,
+              busy: _busy,
+              error: _error.isNotEmpty ? _error : state?.lastError ?? '',
+              positionMs: positionMs,
+              durationMs: durationMs,
+              manualSeekController: _manualSeekController,
+              onPlayPause: () => _run(player.togglePlayPause),
+              onStop: () => _run(player.stop),
+              onPrevious: () => _run(player.previous),
+              onNext: () => _run(player.next),
+              onSeekStart: (_) => setState(() => _draggingSeek = true),
+              onSeekChanged: (value) => setState(() => _seekMs = value),
+              onSeekEnd: (value) async {
+                setState(() => _draggingSeek = false);
+                await _run(() => player.seekMs(positionMs: value.round()));
+              },
+              onManualSeek: () {
+                final value = int.tryParse(_manualSeekController.text.trim());
+                if (value != null) {
+                  _run(() => player.seekMs(positionMs: value));
+                }
+              },
+              onVolumeChanged: (value) =>
+                  _run(() => player.setVolume(volume: value)),
+              onMutedChanged: (value) =>
+                  _run(() => player.setMuted(muted: value)),
+              onFadeIn: () => _run(() => player.fadeIn(durationMs: 1200)),
+              onFadeOut: () => _run(() => player.fadeOut(durationMs: 1200)),
+              onSpeedChanged: (value) =>
+                  _run(() => player.setSpeed(speed: value)),
+              onShuffleChanged: (value) =>
+                  _run(() => player.setShuffle(enabled: value)),
+              onRepeatChanged: (value) =>
+                  _run(() => player.setRepeatMode(mode: value)),
+              onOutputChanged: (value) =>
+                  _run(() => player.setOutputDevice(deviceId: value)),
+              timeLabel:
+                  '${_formatTime(positionMs)} / ${durationMs > 0 ? _formatTime(durationMs) : '0:00'}',
+            );
+
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(width: 360, child: queuePane),
+                  VerticalDivider(width: 1, color: color.outlineVariant),
+                  Expanded(child: controlPane),
+                ],
+              );
+            }
+
+            return ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                SizedBox(height: 420, child: queuePane),
+                Divider(height: 1, color: color.outlineVariant),
+                controlPane,
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _QueuePane extends StatelessWidget {
+  const _QueuePane({
+    required this.queueController,
+    required this.newItemController,
+    required this.queueFocus,
+    required this.playlist,
+    required this.currentIndex,
+    required this.onLoad,
+    required this.onAppend,
+    required this.onPlayIndex,
+  });
+
+  final TextEditingController queueController;
+  final TextEditingController newItemController;
+  final FocusNode queueFocus;
+  final List<player.Track> playlist;
+  final int currentIndex;
+  final VoidCallback onLoad;
+  final VoidCallback onAppend;
+  final ValueChanged<int> onPlayIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Queue',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: onLoad,
+                icon: const Icon(Icons.playlist_play),
+                label: const Text('Load'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: newItemController,
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.link),
+              suffixIcon: IconButton(
+                tooltip: 'Add',
+                onPressed: onAppend,
+                icon: const Icon(Icons.add),
+              ),
+              border: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(8)),
+              ),
+            ),
+            onSubmitted: (_) => onAppend(),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 2,
+            child: TextField(
+              controller: queueController,
+              focusNode: queueFocus,
+              expands: true,
+              minLines: null,
+              maxLines: null,
+              textAlignVertical: TextAlignVertical.top,
+              decoration: const InputDecoration(
+                alignLabelWithHint: true,
+                labelText: 'Paths / URLs',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 3,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: ListView.separated(
+                itemCount: playlist.length,
+                separatorBuilder: (_, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final track = playlist[index];
+                  final selected = index == currentIndex;
+                  return ListTile(
+                    dense: true,
+                    selected: selected,
+                    leading: Icon(
+                      selected ? Icons.graphic_eq : Icons.music_note,
+                    ),
+                    title: Text(
+                      track.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      track.uri,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Play',
+                      onPressed: () => onPlayIndex(index),
+                      icon: const Icon(Icons.play_arrow),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ControlPane extends StatelessWidget {
+  const _ControlPane({
+    required this.state,
+    required this.devices,
+    required this.busy,
+    required this.error,
+    required this.positionMs,
+    required this.durationMs,
+    required this.manualSeekController,
+    required this.onPlayPause,
+    required this.onStop,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onSeekStart,
+    required this.onSeekChanged,
+    required this.onSeekEnd,
+    required this.onManualSeek,
+    required this.onVolumeChanged,
+    required this.onMutedChanged,
+    required this.onFadeIn,
+    required this.onFadeOut,
+    required this.onSpeedChanged,
+    required this.onShuffleChanged,
+    required this.onRepeatChanged,
+    required this.onOutputChanged,
+    required this.timeLabel,
+  });
+
+  final player.PlaybackState? state;
+  final List<player.AudioOutputDevice> devices;
+  final bool busy;
+  final String error;
+  final double positionMs;
+  final double durationMs;
+  final TextEditingController manualSeekController;
+  final VoidCallback onPlayPause;
+  final VoidCallback onStop;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final ValueChanged<double> onSeekStart;
+  final ValueChanged<double> onSeekChanged;
+  final ValueChanged<double> onSeekEnd;
+  final VoidCallback onManualSeek;
+  final ValueChanged<double> onVolumeChanged;
+  final ValueChanged<bool> onMutedChanged;
+  final VoidCallback onFadeIn;
+  final VoidCallback onFadeOut;
+  final ValueChanged<double> onSpeedChanged;
+  final ValueChanged<bool> onShuffleChanged;
+  final ValueChanged<player.RepeatMode> onRepeatChanged;
+  final ValueChanged<String> onOutputChanged;
+  final String timeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme;
+    final activeTrack = state?.currentTitle.isNotEmpty == true
+        ? state!.currentTitle
+        : 'No track';
+    final currentOutput = state?.outputDeviceId ?? '';
+    final volume = (state?.volume ?? 1.0).clamp(0.0, 1.5);
+    final speed = state?.speed ?? 1.0;
+    final repeatMode = state?.repeatMode ?? player.RepeatMode.none;
+    final deviceItems = devices.isEmpty
+        ? [const DropdownMenuItem(value: '', child: Text('System default'))]
+        : devices
+              .map(
+                (device) => DropdownMenuItem(
+                  value: device.id,
+                  child: Text(device.name),
+                ),
+              )
+              .toList();
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      activeTrack,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      state?.currentUri ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: color.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              if (busy)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Slider(
+            value: positionMs,
+            max: durationMs > 0 ? durationMs : 1,
+            onChangeStart: onSeekStart,
+            onChanged: onSeekChanged,
+            onChangeEnd: onSeekEnd,
+          ),
+          Row(
+            children: [
+              Expanded(child: Text(timeLabel)),
+              SizedBox(
+                width: 132,
+                child: TextField(
+                  controller: manualSeekController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    suffixText: 'ms',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
+                    ),
+                  ),
+                  onSubmitted: (_) => onManualSeek(),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Seek',
+                onPressed: onManualSeek,
+                icon: const Icon(Icons.low_priority),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              IconButton.filledTonal(
+                tooltip: 'Previous',
+                onPressed: onPrevious,
+                icon: const Icon(Icons.skip_previous),
+              ),
+              IconButton.filled(
+                tooltip: state?.isPlaying == true ? 'Pause' : 'Play',
+                iconSize: 34,
+                onPressed: onPlayPause,
+                icon: Icon(
+                  state?.isPlaying == true ? Icons.pause : Icons.play_arrow,
+                ),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Next',
+                onPressed: onNext,
+                icon: const Icon(Icons.skip_next),
+              ),
+              IconButton.outlined(
+                tooltip: 'Stop',
+                onPressed: onStop,
+                icon: const Icon(Icons.stop),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _Section(
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: state?.muted == true ? 'Unmute' : 'Mute',
+                      onPressed: () => onMutedChanged(!(state?.muted ?? false)),
+                      icon: Icon(
+                        state?.muted == true
+                            ? Icons.volume_off
+                            : Icons.volume_up,
+                      ),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: volume,
+                        max: 1.5,
+                        divisions: 30,
+                        label: volume.toStringAsFixed(2),
+                        onChanged: onVolumeChanged,
+                      ),
+                    ),
+                    SizedBox(
+                      width: 48,
+                      child: Text('${(volume * 100).round()}%'),
+                    ),
+                    IconButton(
+                      tooltip: 'Fade in',
+                      onPressed: onFadeIn,
+                      icon: const Icon(Icons.trending_up),
+                    ),
+                    IconButton(
+                      tooltip: 'Fade out',
+                      onPressed: onFadeOut,
+                      icon: const Icon(Icons.trending_down),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SegmentedButton<double>(
+                      segments: const [
+                        ButtonSegment(value: 0.5, label: Text('0.5x')),
+                        ButtonSegment(value: 1.0, label: Text('1x')),
+                        ButtonSegment(value: 1.5, label: Text('1.5x')),
+                        ButtonSegment(value: 2.0, label: Text('2x')),
+                      ],
+                      selected: {speed},
+                      onSelectionChanged: (values) =>
+                          onSpeedChanged(values.first),
+                    ),
+                    FilterChip(
+                      selected: state?.shuffle ?? false,
+                      avatar: const Icon(Icons.shuffle),
+                      label: const Text('Shuffle'),
+                      onSelected: onShuffleChanged,
+                    ),
+                    SegmentedButton<player.RepeatMode>(
+                      segments: const [
+                        ButtonSegment(
+                          value: player.RepeatMode.none,
+                          icon: Icon(Icons.arrow_right_alt),
+                        ),
+                        ButtonSegment(
+                          value: player.RepeatMode.one,
+                          icon: Icon(Icons.repeat_one),
+                        ),
+                        ButtonSegment(
+                          value: player.RepeatMode.all,
+                          icon: Icon(Icons.repeat),
+                        ),
+                      ],
+                      selected: {repeatMode},
+                      onSelectionChanged: (values) =>
+                          onRepeatChanged(values.first),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _Section(
+            child: DropdownButtonFormField<String>(
+              initialValue:
+                  deviceItems.any((item) => item.value == currentOutput)
+                  ? currentOutput
+                  : '',
+              items: deviceItems,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.speaker),
+                labelText: 'Output',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+              ),
+              onChanged: (value) => onOutputChanged(value ?? ''),
+            ),
+          ),
+          if (error.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: color.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  error,
+                  style: TextStyle(color: color.onErrorContainer),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  const _Section({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(padding: const EdgeInsets.all(12), child: child),
+    );
+  }
+}
