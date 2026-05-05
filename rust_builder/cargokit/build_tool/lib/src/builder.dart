@@ -146,7 +146,7 @@ class RustBuilder {
         'run',
         _toolchain,
         'cargo',
-        'build',
+        if (target.darwinPlatform != null) 'rustc' else 'build',
         ...extraArgs,
         '--manifest-path',
         manifestPath,
@@ -157,6 +157,11 @@ class RustBuilder {
         target.rust,
         '--target-dir',
         environment.targetTempDir,
+        if (target.darwinPlatform != null) ...[
+          '--',
+          '--crate-type',
+          'staticlib',
+        ],
       ],
       environment: await _buildEnvironment(),
     );
