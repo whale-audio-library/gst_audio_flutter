@@ -57,6 +57,22 @@ Future<player.PlaybackState> _playAndWait(List<String> inputs) async {
 
   expect(state.lastError, isEmpty);
   expect(state.positionMs, greaterThan(0));
+  state = await _waitForStablePlayback(state);
   await player.stop();
+  await Future<void>.delayed(const Duration(seconds: 2));
+  return state;
+}
+
+Future<player.PlaybackState> _waitForStablePlayback(
+  player.PlaybackState state,
+) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 2));
+  while (DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    state = await player.getState();
+    if (state.lastError.isNotEmpty) {
+      fail(state.lastError);
+    }
+  }
   return state;
 }
