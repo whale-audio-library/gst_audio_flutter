@@ -62,12 +62,16 @@ jobs:
           fi
 
           echo "${GSTREAMER_IOS_SHA256}  ${package_path}" | shasum --algorithm 256 --check -
-          sudo installer -pkg "$package_path" -target /
+          installer -dumplog -verbose \
+            -pkg "$package_path" \
+            -target CurrentUserHomeDirectory
 
-          gstreamer_prefix="/Library/Frameworks/GStreamer.framework/Versions/1.0"
+          gstreamer_prefix="$HOME/Library/Developer/GStreamer/iPhone.sdk"
           pkg_config_dir="$gstreamer_prefix/lib/pkgconfig"
-          test -f "$pkg_config_dir/gstreamer-1.0.pc"
-          test -f "$pkg_config_dir/glib-2.0.pc"
+          if [[ ! -f "$pkg_config_dir/gstreamer-1.0.pc" || ! -f "$pkg_config_dir/glib-2.0.pc" ]]; then
+            find "$HOME/Library/Developer/GStreamer" -maxdepth 5 -type f -name '*.pc' -print || true
+            exit 1
+          fi
 
           {
             echo "GSTREAMER_ROOT_IOS=$gstreamer_prefix"
