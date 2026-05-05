@@ -180,7 +180,7 @@ SYSTEM_DEPS_GLIB_2_0_INCLUDE=<Headers paths>
 Cargokit 默认 Darwin 构建路径会收集 Rust 产物，并对静态库执行 `lipo -create`。本项目做了两个调整：
 
 1. 单架构 iOS 构建时，如果只有一个 source `.a`，直接复制，不再执行 `lipo -create`。
-2. Darwin 平台使用 `cargo rustc -- --crate-type staticlib`，只生成 pod 需要的 Rust staticlib。
+2. Darwin 平台生成临时 Cargo manifest，把 `[lib] crate-type` 收窄为 `["staticlib"]`，只生成 pod 需要的 Rust staticlib。
 
 相关文件：
 

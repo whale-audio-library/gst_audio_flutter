@@ -1,6 +1,8 @@
 /// This is copied from Cargokit (which is the official way to use it currently)
 /// Details: https://fzyzcjy.github.io/flutter_rust_bridge/manual/integrate/builtin
 
+import 'dart:io';
+
 import 'package:collection/collection.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
@@ -140,7 +142,7 @@ class RustBuilder {
   /// Returns the path of directory containing build artifacts.
   Future<String> build() async {
     final extraArgs = _buildOptions?.flags ?? [];
-    final manifestPath = path.join(environment.manifestDir, 'Cargo.toml');
+    final manifestPath = _manifestPath();
     runCommand(
       'rustup',
       [
@@ -172,6 +174,76 @@ class RustBuilder {
       environment.configuration.rustName,
     );
   }
+
+  String _manifestPath() {
+    final manifestPath = path.join(environment.manifestDir, 'Cargo.toml');
+    if (target.darwinPlatform == null) {
+      return manifestPath;
+    }
+
+    final staticlibManifestDir = Directory(path.join(
+      environment.targetTempDir,
+      'cargokit',
+      'staticlib_manifest',
+      target.rust,
+    ));
+    staticlibManifestDir.createSync(recursive: true);
+
+    final sourceManifest = File(manifestPath);
+    final staticlibManifest = File(
+      path.join(staticlibManifestDir.path, 'Cargo.toml'),
+    );
+    staticlibManifest.writeAsStringSync(_staticlibManifest(
+      sourceManifest.readAsStringSync(),
+      sourceDir: environment.manifestDir,
+    ));
+
+    final sourceLockfile =
+        File(path.join(environment.manifestDir, 'Cargo.lock'));
+    if (sourceLockfile.existsSync()) {
+      sourceLockfile.copySync(path.join(staticlibManifestDir.path, 'Cargo.lock'));
+    }
+
+    return staticlibManifest.path;
+  }
+
+  String _staticlibManifest(String manifest, {required String sourceDir}) {
+    final libPath = _tomlString(path.join(sourceDir, 'src', 'lib.rs'));
+    final buildPath = _tomlString(path.join(sourceDir, 'build.rs'));
+    final buildScript = File(path.join(sourceDir, 'build.rs')).existsSync()
+        ? 'build = "$buildPath"\n'
+        : '';
+    final staticlibLibSection = [
+      '[lib]',
+      'path = "$libPath"',
+      'crate-type = ["staticlib"]',
+      '',
+    ].join('\n');
+
+    final packageSection = RegExp(
+      r'(?ms)^\[package\]\s*$.*?(?=^\[|\z)',
+    );
+    final withBuildScript = manifest.replaceFirstMapped(
+      packageSection,
+      (match) {
+        final section = match.group(0)!;
+        if (buildScript.isEmpty || RegExp(r'(?m)^build\s*=').hasMatch(section)) {
+          return section;
+        }
+        return section.replaceFirst('\n', '\n$buildScript');
+      },
+    );
+
+    final libSection = RegExp(r'(?ms)^\[lib\]\s*$.*?(?=^\[|\z)');
+    if (libSection.hasMatch(withBuildScript)) {
+      return withBuildScript.replaceFirst(libSection, staticlibLibSection);
+    }
+
+    return '$withBuildScript\n$staticlibLibSection';
+  }
+
+  String _tomlString(String value) =>
+      path.absolute(value).replaceAll(r'\', r'\\').replaceAll('"', r'\"');
 
   Future<Map<String, String>> _buildEnvironment() async {
     if (target.android != null) {
