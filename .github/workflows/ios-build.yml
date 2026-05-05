@@ -92,38 +92,21 @@ jobs:
           headers_dir="$ios_framework_dir/Headers"
           test -d "$headers_dir"
           include_paths="$headers_dir:$headers_dir/glib-2.0:$headers_dir/gstreamer-1.0:$headers_dir/arm64"
+          echo "Using GStreamer iOS framework at $ios_framework_dir"
 
-          pkg_config_pc="$(find "$extract_dir" -type f -name 'gstreamer-1.0.pc' -print -quit)"
-          pkg_config_dir=""
-          if [[ -n "$pkg_config_pc" ]]; then
-            pkg_config_dir="$(dirname "$pkg_config_pc")"
-          fi
           {
             echo "GSTREAMER_IOS_XCFRAMEWORK=$gstreamer_xcframework"
             echo "GSTREAMER_IOS_FRAMEWORK_DIR=$ios_framework_dir"
           } >> "$GITHUB_ENV"
 
-          if [[ -n "$pkg_config_dir" ]]; then
+          for dep in GLIB_2_0 GOBJECT_2_0 GIO_2_0 GSTREAMER_1_0; do
             {
-              echo "PKG_CONFIG_ALLOW_CROSS=1"
-              echo "PKG_CONFIG_PATH=$pkg_config_dir"
-              echo "PKG_CONFIG_LIBDIR=$pkg_config_dir"
+              echo "SYSTEM_DEPS_${dep}_NO_PKG_CONFIG=1"
+              echo "SYSTEM_DEPS_${dep}_LIB_FRAMEWORK=GStreamer"
+              echo "SYSTEM_DEPS_${dep}_SEARCH_FRAMEWORK=$ios_framework_dir"
+              echo "SYSTEM_DEPS_${dep}_INCLUDE=$include_paths"
             } >> "$GITHUB_ENV"
-
-            PKG_CONFIG_ALLOW_CROSS=1 \
-            PKG_CONFIG_PATH="$pkg_config_dir" \
-            PKG_CONFIG_LIBDIR="$pkg_config_dir" \
-              pkg-config --modversion glib-2.0 gstreamer-1.0
-          else
-            for dep in GLIB_2_0 GOBJECT_2_0 GIO_2_0 GSTREAMER_1_0; do
-              {
-                echo "SYSTEM_DEPS_${dep}_NO_PKG_CONFIG=1"
-                echo "SYSTEM_DEPS_${dep}_LIB_FRAMEWORK=GStreamer"
-                echo "SYSTEM_DEPS_${dep}_SEARCH_FRAMEWORK=$ios_framework_dir"
-                echo "SYSTEM_DEPS_${dep}_INCLUDE=$include_paths"
-              } >> "$GITHUB_ENV"
-            done
-          fi
+          done
 
       - name: Get Flutter dependencies
         run: flutter pub get
