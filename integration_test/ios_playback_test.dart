@@ -31,10 +31,10 @@ void main() {
     await tester.pumpWidget(const AudioPlayerApp());
     await tester.pumpAndSettle();
 
-    final state = await _playAndWait(
-      const ['http://127.0.0.1:8765/tone.wav'],
-    );
+    final state = await _playAndWait(const ['http://127.0.0.1:8765/tone.wav']);
     expect(state.currentUri, 'http://127.0.0.1:8765/tone.wav');
+    expect(state.bufferingPercent, inInclusiveRange(0, 100));
+    expect(state.isBuffering, isFalse);
   });
 
   testWidgets('handles pause resume next and previous controls on iOS', (

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gst_audio_flutter/main.dart';
 import 'package:gst_audio_flutter/src/rust/api/player.dart' as player;
@@ -12,10 +13,11 @@ void main() {
   });
 
   tearDownAll(() async {
+    await player.stop();
     await player.shutdownPlayer();
   });
 
-  testWidgets('plays an HTTP WAV stream through Rust GStreamer', (
+  testWidgets('shows HTTP buffering progress in the Flutter player', (
     tester,
   ) async {
     await tester.pumpWidget(const AudioPlayerApp());
@@ -31,11 +33,15 @@ void main() {
     final deadline = DateTime.now().add(const Duration(seconds: 8));
     while (DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 250));
       state = await player.getState();
       if (state.lastError.isNotEmpty) {
         fail(state.lastError);
       }
-      if (state.positionMs > 0 || state.isPlaying) {
+      if (find
+          .byKey(const ValueKey('http-buffer-progress'))
+          .evaluate()
+          .isNotEmpty) {
         break;
       }
     }
@@ -43,7 +49,14 @@ void main() {
     expect(state.lastError, isEmpty);
     expect(state.currentUri, 'http://127.0.0.1:8765/tone.wav');
     expect(state.bufferingPercent, inInclusiveRange(0, 100));
-    expect(state.isBuffering, isFalse);
-    expect(state.positionMs, greaterThan(0));
+    final bufferProgress = find.byKey(const ValueKey('http-buffer-progress'));
+    expect(bufferProgress, findsOneWidget);
+    expect(
+      find.descendant(
+        of: bufferProgress,
+        matching: find.byType(LinearProgressIndicator),
+      ),
+      findsOneWidget,
+    );
   });
 }

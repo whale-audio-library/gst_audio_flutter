@@ -38,6 +38,8 @@ pub struct PlaybackState {
     pub is_playing: bool,
     pub position_ms: i64,
     pub duration_ms: i64,
+    pub buffering_percent: i32,
+    pub is_buffering: bool,
     pub volume: f64,
     pub muted: bool,
     pub speed: f64,
@@ -545,6 +547,8 @@ struct GStreamerPlayer {
     audio_sink: gst::Element,
     volume_element: gst::Element,
     fade: Option<FadeState>,
+    buffering_percent: i32,
+    is_buffering: bool,
     last_error: String,
 }
 
@@ -574,6 +578,8 @@ impl GStreamerPlayer {
             audio_sink,
             volume_element,
             fade: None,
+            buffering_percent: 100,
+            is_buffering: false,
             last_error: String::new(),
         })
     }
@@ -695,6 +701,7 @@ impl GStreamerPlayer {
 
         let was_playing = autoplay || self.want_playing || self.is_playing;
         self.stop_pipeline();
+        self.reset_buffering_for_uri(&uri);
         self.playbin.set_property("uri", &uri);
         self.last_error.clear();
 
@@ -744,6 +751,8 @@ impl GStreamerPlayer {
         let _ = self.playbin.set_state(gst::State::Null);
         let _ = self.playbin.state(gst::ClockTime::from_seconds(2));
         self.is_playing = false;
+        self.is_buffering = false;
+        self.buffering_percent = 100;
     }
 
     fn previous_track(&mut self) {
@@ -943,6 +952,7 @@ impl GStreamerPlayer {
                 gst::MessageView::Error(err) => {
                     self.want_playing = false;
                     self.is_playing = false;
+                    self.is_buffering = false;
                     self.last_error = match err.debug() {
                         Some(debug) => format!("{} ({debug})", err.error()),
                         None => err.error().to_string(),
@@ -960,12 +970,18 @@ impl GStreamerPlayer {
                     }
                 }
                 gst::MessageView::Buffering(buffering) => {
-                    if buffering.percent() < 100 {
+                    let percent = buffering.percent().clamp(0, 100);
+                    self.buffering_percent = percent;
+                    if percent < 100 {
+                        self.is_buffering = true;
                         if self.want_playing {
                             let _ = self.playbin.set_state(gst::State::Paused);
                         }
                     } else if self.want_playing {
+                        self.is_buffering = false;
                         let _ = self.playbin.set_state(gst::State::Playing);
+                    } else {
+                        self.is_buffering = false;
                     }
                 }
                 gst::MessageView::ClockLost(_) => {
@@ -997,6 +1013,8 @@ impl GStreamerPlayer {
             is_playing: self.is_playing,
             position_ms,
             duration_ms,
+            buffering_percent: self.buffering_percent,
+            is_buffering: self.is_buffering,
             volume: self.volume,
             muted: self.muted,
             speed: self.speed,
@@ -1066,6 +1084,11 @@ impl GStreamerPlayer {
             .query_duration::<gst::ClockTime>()
             .map(|time| time.mseconds() as i64)
             .unwrap_or(0)
+    }
+
+    fn reset_buffering_for_uri(&mut self, uri: &str) {
+        self.buffering_percent = if is_http_uri(uri) { 0 } else { 100 };
+        self.is_buffering = false;
     }
 }
 
@@ -1194,6 +1217,10 @@ fn title_from_input(input: &str) -> String {
 
 fn looks_like_uri(input: &str) -> bool {
     input.contains("://") || input.starts_with("file:")
+}
+
+fn is_http_uri(uri: &str) -> bool {
+    uri.starts_with("http://") || uri.starts_with("https://")
 }
 
 fn flutter_asset_to_uri(asset_path: &str) -> String {

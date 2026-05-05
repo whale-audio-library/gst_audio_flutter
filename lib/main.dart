@@ -460,6 +460,10 @@ class _ControlPane extends StatelessWidget {
     final volume = (state?.volume ?? 1.0).clamp(0.0, 1.5);
     final speed = state?.speed ?? 1.0;
     final repeatMode = state?.repeatMode ?? player.RepeatMode.none;
+    final showHttpBuffer = _isHttpUri(state?.currentUri ?? '');
+    final bufferingPercent = (state?.bufferingPercent ?? 100)
+        .clamp(0, 100)
+        .toInt();
     final deviceItems = devices.isEmpty
         ? [const DropdownMenuItem(value: '', child: Text('System default'))]
         : devices
@@ -517,6 +521,13 @@ class _ControlPane extends StatelessWidget {
             onChanged: onSeekChanged,
             onChangeEnd: onSeekEnd,
           ),
+          if (showHttpBuffer) ...[
+            const SizedBox(height: 4),
+            _HttpBufferProgress(
+              percent: bufferingPercent,
+              buffering: state?.isBuffering ?? false,
+            ),
+          ],
           Row(
             children: [
               Expanded(child: Text(timeLabel)),
@@ -700,6 +711,60 @@ class _ControlPane extends StatelessWidget {
   }
 }
 
+class _HttpBufferProgress extends StatelessWidget {
+  const _HttpBufferProgress({required this.percent, required this.buffering});
+
+  final int percent;
+  final bool buffering;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme;
+    final value = percent.clamp(0, 100) / 100.0;
+    final status = buffering ? 'Buffering' : 'Buffered';
+
+    return Semantics(
+      label: 'HTTP buffer',
+      value: '$percent%',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Column(
+          key: const ValueKey('http-buffer-progress'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                minHeight: 4,
+                value: value,
+                backgroundColor: color.surfaceContainerHighest,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Text(
+                  '$percent%',
+                  style: TextStyle(fontSize: 12, color: color.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Section extends StatelessWidget {
   const _Section({required this.child});
 
@@ -715,4 +780,9 @@ class _Section extends StatelessWidget {
       child: Padding(padding: const EdgeInsets.all(12), child: child),
     );
   }
+}
+
+bool _isHttpUri(String uri) {
+  final lower = uri.toLowerCase();
+  return lower.startsWith('http://') || lower.startsWith('https://');
 }

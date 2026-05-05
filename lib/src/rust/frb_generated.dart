@@ -808,8 +808,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PlaybackState dco_decode_playback_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 17)
+      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
     return PlaybackState(
       playlist: dco_decode_list_track(arr[0]),
       currentIndex: dco_decode_i_32(arr[1]),
@@ -818,14 +818,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isPlaying: dco_decode_bool(arr[4]),
       positionMs: dco_decode_i_64(arr[5]),
       durationMs: dco_decode_i_64(arr[6]),
-      volume: dco_decode_f_64(arr[7]),
-      muted: dco_decode_bool(arr[8]),
-      speed: dco_decode_f_64(arr[9]),
-      shuffle: dco_decode_bool(arr[10]),
-      repeatMode: dco_decode_repeat_mode(arr[11]),
-      outputDeviceId: dco_decode_String(arr[12]),
-      outputDeviceName: dco_decode_String(arr[13]),
-      lastError: dco_decode_String(arr[14]),
+      bufferingPercent: dco_decode_i_32(arr[7]),
+      isBuffering: dco_decode_bool(arr[8]),
+      volume: dco_decode_f_64(arr[9]),
+      muted: dco_decode_bool(arr[10]),
+      speed: dco_decode_f_64(arr[11]),
+      shuffle: dco_decode_bool(arr[12]),
+      repeatMode: dco_decode_repeat_mode(arr[13]),
+      outputDeviceId: dco_decode_String(arr[14]),
+      outputDeviceName: dco_decode_String(arr[15]),
+      lastError: dco_decode_String(arr[16]),
     );
   }
 
@@ -962,6 +964,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_isPlaying = sse_decode_bool(deserializer);
     var var_positionMs = sse_decode_i_64(deserializer);
     var var_durationMs = sse_decode_i_64(deserializer);
+    var var_bufferingPercent = sse_decode_i_32(deserializer);
+    var var_isBuffering = sse_decode_bool(deserializer);
     var var_volume = sse_decode_f_64(deserializer);
     var var_muted = sse_decode_bool(deserializer);
     var var_speed = sse_decode_f_64(deserializer);
@@ -978,6 +982,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isPlaying: var_isPlaying,
       positionMs: var_positionMs,
       durationMs: var_durationMs,
+      bufferingPercent: var_bufferingPercent,
+      isBuffering: var_isBuffering,
       volume: var_volume,
       muted: var_muted,
       speed: var_speed,
@@ -1107,6 +1113,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.isPlaying, serializer);
     sse_encode_i_64(self.positionMs, serializer);
     sse_encode_i_64(self.durationMs, serializer);
+    sse_encode_i_32(self.bufferingPercent, serializer);
+    sse_encode_bool(self.isBuffering, serializer);
     sse_encode_f_64(self.volume, serializer);
     sse_encode_bool(self.muted, serializer);
     sse_encode_f_64(self.speed, serializer);

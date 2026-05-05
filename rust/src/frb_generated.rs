@@ -846,6 +846,8 @@ impl SseDecode for crate::api::player::PlaybackState {
         let mut var_isPlaying = <bool>::sse_decode(deserializer);
         let mut var_positionMs = <i64>::sse_decode(deserializer);
         let mut var_durationMs = <i64>::sse_decode(deserializer);
+        let mut var_bufferingPercent = <i32>::sse_decode(deserializer);
+        let mut var_isBuffering = <bool>::sse_decode(deserializer);
         let mut var_volume = <f64>::sse_decode(deserializer);
         let mut var_muted = <bool>::sse_decode(deserializer);
         let mut var_speed = <f64>::sse_decode(deserializer);
@@ -862,6 +864,8 @@ impl SseDecode for crate::api::player::PlaybackState {
             is_playing: var_isPlaying,
             position_ms: var_positionMs,
             duration_ms: var_durationMs,
+            buffering_percent: var_bufferingPercent,
+            is_buffering: var_isBuffering,
             volume: var_volume,
             muted: var_muted,
             speed: var_speed,
@@ -993,6 +997,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::player::PlaybackState {
             self.is_playing.into_into_dart().into_dart(),
             self.position_ms.into_into_dart().into_dart(),
             self.duration_ms.into_into_dart().into_dart(),
+            self.buffering_percent.into_into_dart().into_dart(),
+            self.is_buffering.into_into_dart().into_dart(),
             self.volume.into_into_dart().into_dart(),
             self.muted.into_into_dart().into_dart(),
             self.speed.into_into_dart().into_dart(),
@@ -1150,6 +1156,8 @@ impl SseEncode for crate::api::player::PlaybackState {
         <bool>::sse_encode(self.is_playing, serializer);
         <i64>::sse_encode(self.position_ms, serializer);
         <i64>::sse_encode(self.duration_ms, serializer);
+        <i32>::sse_encode(self.buffering_percent, serializer);
+        <bool>::sse_encode(self.is_buffering, serializer);
         <f64>::sse_encode(self.volume, serializer);
         <bool>::sse_encode(self.muted, serializer);
         <f64>::sse_encode(self.speed, serializer);

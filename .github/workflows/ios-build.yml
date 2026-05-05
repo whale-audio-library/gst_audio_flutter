@@ -243,6 +243,12 @@ jobs:
             flutter test integration_test/ios_playback_test.dart -d "$simulator_id" 2>&1 \
               | tee "$log_dir/flutter-test.log" || test_status=$?
 
+          if [[ "$test_status" -eq 0 ]]; then
+            GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+              flutter test integration_test/http_buffer_progress_test.dart -d "$simulator_id" 2>&1 \
+                | tee "$log_dir/http-buffer-progress-test.log" || test_status=$?
+          fi
+
           xcrun simctl spawn "$simulator_id" log show \
             --style syslog \
             --last 10m \

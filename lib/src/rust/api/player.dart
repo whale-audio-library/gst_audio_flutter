@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `apply_speed_after_seek`, `apply_volume`, `build_audio_sink`, `checked_index`, `clamp_speed`, `compute_next_index`, `create_device_sink`, `current_duration_ms`, `current_position_ms`, `current_track`, `device_id`, `ensure_runtime`, `fade_to`, `handle_command`, `input_to_uri`, `list_output_devices`, `load_current`, `looks_like_uri`, `new`, `next_track`, `pause_playback`, `poll_bus`, `previous_track`, `refresh_output_devices`, `run_player_thread`, `seek`, `send`, `set_output_device`, `set_speed`, `snapshot`, `start_playback`, `stop_fade`, `stop_pipeline`, `tick_fade`, `title_from_input`
+// These functions are ignored because they are not marked as `pub`: `apply_speed_after_seek`, `apply_volume`, `build_audio_sink`, `checked_index`, `clamp_speed`, `compute_next_index`, `configure_platform_gstreamer_runtime`, `create_device_sink`, `current_duration_ms`, `current_position_ms`, `current_track`, `device_id`, `ensure_runtime_started`, `ensure_runtime`, `fade_to`, `flutter_asset_to_uri`, `handle_command`, `input_to_uri`, `is_http_uri`, `join`, `list_output_devices`, `load_current`, `looks_like_uri`, `new`, `next_track`, `pause_playback`, `poll_bus`, `previous_track`, `recv_reply`, `refresh_output_devices`, `register_static_plugins`, `reset_buffering_for_uri`, `run_player_thread`, `runtime_slot`, `seek`, `send`, `set_output_device`, `set_speed`, `snapshot`, `start_playback`, `start`, `stop_fade`, `stop_pipeline`, `tick_fade`, `title_from_input`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Command`, `FadeState`, `GStreamerPlayer`, `PlayerRuntime`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -107,6 +107,8 @@ class PlaybackState {
   final bool isPlaying;
   final PlatformInt64 positionMs;
   final PlatformInt64 durationMs;
+  final int bufferingPercent;
+  final bool isBuffering;
   final double volume;
   final bool muted;
   final double speed;
@@ -124,6 +126,8 @@ class PlaybackState {
     required this.isPlaying,
     required this.positionMs,
     required this.durationMs,
+    required this.bufferingPercent,
+    required this.isBuffering,
     required this.volume,
     required this.muted,
     required this.speed,
@@ -143,6 +147,8 @@ class PlaybackState {
       isPlaying.hashCode ^
       positionMs.hashCode ^
       durationMs.hashCode ^
+      bufferingPercent.hashCode ^
+      isBuffering.hashCode ^
       volume.hashCode ^
       muted.hashCode ^
       speed.hashCode ^
@@ -164,6 +170,8 @@ class PlaybackState {
           isPlaying == other.isPlaying &&
           positionMs == other.positionMs &&
           durationMs == other.durationMs &&
+          bufferingPercent == other.bufferingPercent &&
+          isBuffering == other.isBuffering &&
           volume == other.volume &&
           muted == other.muted &&
           speed == other.speed &&
