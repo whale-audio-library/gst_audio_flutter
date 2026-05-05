@@ -16,10 +16,10 @@
 | Android | 已验证 | 使用 GStreamer Android SDK，静态链接核心库和插件到 `libgst_audio_core.so` |
 | macOS | 工程骨架存在，未完成打包验证 | 需要安装 GStreamer SDK，并处理 `.dylib`/framework 运行时分发 |
 | Windows | 已加入构建/打包适配，未在 Windows 机器实测 | 使用 MSVC 版 GStreamer SDK，Cargokit 注入 `pkg-config` 环境，CMake 复制 DLL/插件 |
-| iOS | 工程骨架存在，未完成 GStreamer 接入验证 | 需要 iOS GStreamer SDK、静态插件注册和链接配置 |
+| iOS | CI 已验证无签名 Release 构建和 unsigned IPA artifact | 使用 GStreamer 1.28.2 `GStreamer.xcframework` 的 `ios-arm64` slice，Xcode 阶段链接 `libGStreamer.a` 和系统 framework |
 | Web | 不适用 native GStreamer | Flutter Web 不能直接加载本项目的 native Rust + GStreamer FFI 后端 |
 
-注意：跨平台工程不等于每个平台已经完成同等打包能力。当前真实跑通过的是 Linux 和 Android；Windows 已补构建和打包配置但还需要在 Windows 主机实测；macOS、iOS 还需要按本指南补齐平台 SDK、链接和运行时库分发。
+注意：跨平台工程不等于每个平台已经完成同等打包能力。当前真实跑通过的是 Linux、Android 和 iOS 无签名 CI 构建；Windows 已补构建和打包配置但还需要在 Windows 主机实测；macOS 还需要按本指南补齐平台 SDK、链接和运行时库分发。iOS 当前没有 Apple Developer 签名、TestFlight 或 App Store 导出流程。
 
 ## 代码结构
 
@@ -269,15 +269,21 @@ Windows 常见问题：
 
 ## iOS 开发
 
-iOS 不能复用 Android 的 `openslessink` 和 Android 静态插件注册逻辑。需要单独接入 iOS GStreamer SDK，并补齐：
+iOS 不能复用 Android 的 `openslessink` 和 Android 静态插件注册逻辑。当前项目已在 GitHub Actions 跑通 `iphoneos` Release 无签名构建，并上传 unsigned IPA artifact。
 
-- per-architecture 的 GStreamer SDK 路径。
-- iOS 可用的音频 sink。
-- 静态插件声明和注册。
-- Podspec 中 GStreamer 静态库、系统 framework 和 linker flag。
-- 真机和模拟器的架构切片验证。
+当前验证路径：
 
-当前 iOS Flutter/Podspec 骨架存在，但 GStreamer iOS 播放后端尚未完成验证。不要把 Android APK 的静态链接结果直接理解为 iOS 已可发布。
+```text
+Actions -> iOS Build -> Run workflow -> branch: main
+```
+
+成功后 artifact 名称：
+
+```text
+gst-audio-flutter-ios-unsigned
+```
+
+注意：这是 unsigned IPA，适合检查包内容或进入后续签名流程，不能直接安装到普通真机。iOS SDK、CI 打包步骤、IPA 生成方式和踩坑记录见 [GStreamer iOS 打包指南](gstreamer-ios-guide.md)。
 
 ## Cerbero 环境
 
