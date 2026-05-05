@@ -34,9 +34,15 @@ class BuildPod {
     final artifacts = await provider.getArtifacts(targets);
 
     void performLipo(String targetFile, Iterable<String> sourceFiles) {
+      final sources = sourceFiles.toList();
+      if (sources.length == 1) {
+        File(sources.single).copySync(targetFile);
+        return;
+      }
+
       runCommand("lipo", [
         '-create',
-        ...sourceFiles,
+        ...sources,
         '-output',
         targetFile,
       ]);
