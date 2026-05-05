@@ -64,14 +64,19 @@ jobs:
               "$archive_url"
             echo "${GSTREAMER_IOS_XCFRAMEWORK_SHA256}  ${archive_path}" | shasum --algorithm 256 --check -
             df -h "$HOME" || true
-            tar -xJf "$archive_path" -C "$extract_dir" \
+            tar_log="$RUNNER_TEMP/gstreamer-tar.log"
+            set +e
+            tar -xJvf "$archive_path" -C "$extract_dir" \
               GStreamer.xcframework/Info.plist \
-              GStreamer.xcframework/ios-arm64 || {
-              status=$?
+              GStreamer.xcframework/ios-arm64 > "$tar_log" 2>&1
+            tar_status=$?
+            set -e
+            tail -n 80 "$tar_log" || true
+            if [[ "$tar_status" -ne 0 ]]; then
               df -h "$HOME" || true
               du -sh "$cache_dir" || true
-              exit "$status"
-            }
+              exit "$tar_status"
+            fi
           else
             echo "${GSTREAMER_IOS_XCFRAMEWORK_SHA256}  ${archive_path}" | shasum --algorithm 256 --check -
           fi
