@@ -52,6 +52,10 @@ class Environment {
         "GSTREAMER_1_0_ROOT_MSVC_X86_64",
         "GSTREAMER_1_0_ROOT_X86_64",
       ]);
+  static String? get gstreamerIosXcframework =>
+      _getOptionalEnvPath("GSTREAMER_IOS_XCFRAMEWORK");
+  static String? get gstreamerIosLibraryDir =>
+      _getOptionalEnvPath("GSTREAMER_IOS_LIBRARY_DIR");
 
   // CMAKE
   static String get targetPlatform => _getEnv("CARGOKIT_TARGET_PLATFORM");

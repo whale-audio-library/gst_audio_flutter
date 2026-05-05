@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'android_environment.dart';
 import 'cargo.dart';
 import 'environment.dart';
+import 'ios_environment.dart';
 import 'options.dart';
 import 'rustup.dart';
 import 'target.dart';
@@ -201,6 +202,10 @@ class RustBuilder {
 
     if (target.rust.contains('-windows-')) {
       return WindowsGStreamerEnvironment(target: target).buildEnvironment();
+    }
+
+    if (target.darwinPlatform != null && target.rust.contains('-ios')) {
+      return IOSGStreamerEnvironment(target: target).buildEnvironment();
     }
 
     return {};

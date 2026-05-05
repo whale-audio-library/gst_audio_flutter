@@ -21,6 +21,7 @@ A new Flutter FFI plugin project.
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
   s.platform = :ios, '11.0'
+  gstreamer_ios_library_dir = ENV['GSTREAMER_IOS_LIBRARY_DIR'] || '$(GSTREAMER_IOS_LIBRARY_DIR)'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
@@ -40,6 +41,7 @@ A new Flutter FFI plugin project.
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/libgst_audio_core.a -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreMedia -framework CoreVideo -framework VideoToolbox',
+    'LIBRARY_SEARCH_PATHS' => "$(inherited) \"#{gstreamer_ios_library_dir}\"",
+    'OTHER_LDFLAGS' => '-force_load ${BUILT_PRODUCTS_DIR}/libgst_audio_core.a -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox',
   }
 end

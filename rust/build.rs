@@ -37,6 +37,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=GSTREAMER_ANDROID_PREFIX");
     println!("cargo:rerun-if-env-changed=GSTREAMER_ROOT_ANDROID");
     println!("cargo:rerun-if-env-changed=GSTREAMER_ANDROID_ABI");
+    println!("cargo:rerun-if-env-changed=GSTREAMER_IOS_LIBRARY_DIR");
     println!("cargo:rerun-if-env-changed=TARGET");
 
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("ios") {

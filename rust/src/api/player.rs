@@ -1,7 +1,7 @@
 use std::{
     path::Path,
     sync::{
-        mpsc::{self, Sender},
+        mpsc::{self, Sender, TryRecvError},
         Mutex, OnceLock,
     },
     thread::{self, JoinHandle},
@@ -13,7 +13,7 @@ use gst::prelude::*;
 use gstreamer as gst;
 use rand::Rng;
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "ios", target_os = "windows"))]
 use std::env;
 
 #[derive(Clone, Debug)]
@@ -87,58 +87,69 @@ enum Command {
 
 struct PlayerRuntime {
     tx: Sender<Command>,
-    handle: Option<JoinHandle<()>>,
+    handle: JoinHandle<()>,
 }
 
 impl PlayerRuntime {
-    fn start() -> Self {
+    fn start() -> Result<Self, String> {
         let (tx, rx) = mpsc::channel();
+        let (ready_tx, ready_rx) = mpsc::channel();
         let handle = thread::Builder::new()
             .name("gst-audio-player".to_string())
             .spawn(move || {
-                if let Err(err) = run_player_thread(rx) {
+                if let Err(err) = run_player_thread(rx, ready_tx) {
                     eprintln!("GStreamer player thread exited: {err}");
                 }
             })
-            .expect("failed to spawn GStreamer player thread");
-        Self {
-            tx,
-            handle: Some(handle),
+            .map_err(|err| format!("failed to spawn GStreamer player thread: {err}"))?;
+
+        match ready_rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(Ok(())) => Ok(Self { tx, handle }),
+            Ok(Err(err)) => {
+                let _ = handle.join();
+                Err(format!("failed to start GStreamer player: {err}"))
+            }
+            Err(err) => {
+                drop(tx);
+                drop(handle);
+                Err(format!("timed out starting GStreamer player: {err}"))
+            }
         }
+    }
+
+    fn join(self) -> Result<(), String> {
+        self.handle
+            .join()
+            .map_err(|_| "player thread panicked".to_string())
     }
 }
 
-static RUNTIME: OnceLock<Mutex<PlayerRuntime>> = OnceLock::new();
+static RUNTIME: OnceLock<Mutex<Option<PlayerRuntime>>> = OnceLock::new();
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
-    ensure_runtime();
+    if let Err(err) = ensure_runtime_started() {
+        eprintln!("Failed to initialize GStreamer player runtime: {err}");
+    }
 }
 
 pub fn shutdown_player() -> Result<(), String> {
-    let Some(runtime) = RUNTIME.get() else {
-        return Ok(());
-    };
-
-    let mut runtime = runtime
+    let mut runtime = runtime_slot()
         .lock()
         .map_err(|_| "player runtime lock is poisoned".to_string())?;
-    if runtime.handle.is_none() {
+    let Some(runtime) = runtime.take() else {
         return Ok(());
-    }
+    };
 
     let (done_tx, done_rx) = mpsc::channel();
     if runtime.tx.send(Command::Shutdown(done_tx)).is_ok() {
         let _ = done_rx.recv_timeout(Duration::from_secs(2));
     }
 
-    if let Some(handle) = runtime.handle.take() {
-        handle
-            .join()
-            .map_err(|_| "player thread panicked during shutdown".to_string())?;
-    }
-    Ok(())
+    runtime
+        .join()
+        .map_err(|err| format!("{err} during shutdown"))
 }
 
 pub fn set_playlist(inputs: Vec<String>, start_index: i32) -> Result<PlaybackState, String> {
@@ -247,50 +258,121 @@ pub fn set_output_device(device_id: String) -> Result<PlaybackState, String> {
 pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, String> {
     let (reply_tx, reply_rx) = mpsc::channel();
     send(Command::ListOutputDevices(reply_tx))?;
-    reply_rx
-        .recv_timeout(Duration::from_secs(2))
-        .map_err(|err| format!("timed out waiting for output devices: {err}"))
+    recv_reply(reply_rx, "output devices")
 }
 
 pub fn get_state() -> Result<PlaybackState, String> {
     let (reply_tx, reply_rx) = mpsc::channel();
     send(Command::RefreshState(reply_tx))?;
-    reply_rx
-        .recv_timeout(Duration::from_secs(2))
-        .map_err(|err| format!("timed out waiting for playback state: {err}"))
+    recv_reply(reply_rx, "playback state")
 }
 
-fn ensure_runtime() -> &'static Mutex<PlayerRuntime> {
-    let runtime = RUNTIME.get_or_init(|| Mutex::new(PlayerRuntime::start()));
-    if let Ok(mut runtime) = runtime.lock() {
-        if runtime.handle.is_none() {
-            *runtime = PlayerRuntime::start();
-        }
+fn runtime_slot() -> &'static Mutex<Option<PlayerRuntime>> {
+    RUNTIME.get_or_init(|| Mutex::new(None))
+}
+
+fn ensure_runtime_started() -> Result<(), String> {
+    let mut runtime = runtime_slot()
+        .lock()
+        .map_err(|_| "player runtime lock is poisoned".to_string())?;
+    ensure_runtime(&mut runtime)
+}
+
+fn ensure_runtime(runtime: &mut Option<PlayerRuntime>) -> Result<(), String> {
+    if runtime
+        .as_ref()
+        .map(|runtime| runtime.handle.is_finished())
+        .unwrap_or(false)
+    {
+        let finished = runtime.take().expect("runtime existed");
+        finished.join()?;
     }
-    runtime
+
+    if runtime.is_none() {
+        *runtime = Some(PlayerRuntime::start()?);
+    }
+    Ok(())
 }
 
 fn send(command: Command) -> Result<(), String> {
-    let runtime = ensure_runtime();
-    let runtime = runtime
-        .lock()
-        .map_err(|_| "player runtime lock is poisoned".to_string())?;
-    runtime
-        .tx
-        .send(command)
-        .map_err(|err| format!("failed to send player command: {err}"))
+    let mut command = Some(command);
+
+    for _ in 0..2 {
+        let mut runtime = runtime_slot()
+            .lock()
+            .map_err(|_| "player runtime lock is poisoned".to_string())?;
+        ensure_runtime(&mut runtime)?;
+        let Some(active_runtime) = runtime.as_ref() else {
+            return Err("player runtime failed to start".to_string());
+        };
+
+        match active_runtime
+            .tx
+            .send(command.take().expect("command is pending"))
+        {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                command = Some(err.0);
+                if let Some(stopped_runtime) = runtime.take() {
+                    if stopped_runtime.handle.is_finished() {
+                        stopped_runtime.join()?;
+                    } else {
+                        return Err(
+                            "failed to send player command: player command channel closed"
+                                .to_string(),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Err("failed to send player command: player thread stopped".to_string())
 }
 
-fn run_player_thread(rx: mpsc::Receiver<Command>) -> Result<(), String> {
-    configure_platform_gstreamer_runtime();
-    gst::init().map_err(|err| err.to_string())?;
-    register_android_static_plugins();
+fn recv_reply<T>(reply_rx: mpsc::Receiver<T>, label: &str) -> Result<T, String> {
+    match reply_rx.recv_timeout(Duration::from_secs(2)) {
+        Ok(value) => Ok(value),
+        Err(mpsc::RecvTimeoutError::Timeout) => Err(format!("timed out waiting for {label}")),
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err(format!("player thread stopped before returning {label}"))
+        }
+    }
+}
 
-    let mut player = GStreamerPlayer::new()?;
+fn run_player_thread(
+    rx: mpsc::Receiver<Command>,
+    ready_tx: Sender<Result<(), String>>,
+) -> Result<(), String> {
+    configure_platform_gstreamer_runtime();
+    if let Err(err) = gst::init() {
+        let err = err.to_string();
+        let _ = ready_tx.send(Err(err.clone()));
+        return Err(err);
+    }
+    register_static_plugins();
+
+    let mut player = match GStreamerPlayer::new() {
+        Ok(player) => player,
+        Err(err) => {
+            let _ = ready_tx.send(Err(err.clone()));
+            return Err(err);
+        }
+    };
+    let _ = ready_tx.send(Ok(()));
     loop {
-        while let Ok(command) = rx.try_recv() {
-            if player.handle_command(command) {
-                return Ok(());
+        loop {
+            match rx.try_recv() {
+                Ok(command) => {
+                    if player.handle_command(command) {
+                        return Ok(());
+                    }
+                }
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    player.stop_pipeline();
+                    return Ok(());
+                }
             }
         }
 
@@ -331,8 +413,26 @@ fn configure_platform_gstreamer_runtime() {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "ios")]
+fn configure_platform_gstreamer_runtime() {
+    let tmp_dir = env::temp_dir();
+    set_env_path_if_missing("TMP", &tmp_dir);
+    set_env_path_if_missing("TEMP", &tmp_dir);
+    set_env_path_if_missing("TMPDIR", &tmp_dir);
+    set_env_path_if_missing("XDG_RUNTIME_DIR", &tmp_dir);
+    set_env_path_if_missing("XDG_CACHE_HOME", &tmp_dir);
+    set_env_path_if_missing("HOME", &tmp_dir);
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "windows")))]
 fn configure_platform_gstreamer_runtime() {}
+
+#[cfg(target_os = "ios")]
+fn set_env_path_if_missing(key: &str, value: &Path) {
+    if env::var_os(key).is_none() {
+        env::set_var(key, value);
+    }
+}
 
 #[cfg(target_os = "windows")]
 fn prepend_env_path(key: &str, value: &Path) {
@@ -351,18 +451,58 @@ fn prepend_env_path(key: &str, value: &Path) {
 }
 
 #[cfg(target_os = "android")]
-fn register_android_static_plugins() {
+fn register_static_plugins() {
     unsafe {
         gst_audio_android_register_static_plugins();
     }
 }
 
-#[cfg(not(target_os = "android"))]
-fn register_android_static_plugins() {}
+#[cfg(target_os = "ios")]
+fn register_static_plugins() {
+    unsafe {
+        let plugins: &[(&str, unsafe extern "C" fn() -> glib::ffi::gboolean)] = &[
+            ("coreelements", gst_plugin_coreelements_register),
+            ("playback", gst_plugin_playback_register),
+            ("typefindfunctions", gst_plugin_typefindfunctions_register),
+            ("audioconvert", gst_plugin_audioconvert_register),
+            ("audioresample", gst_plugin_audioresample_register),
+            ("volume", gst_plugin_volume_register),
+            ("autodetect", gst_plugin_autodetect_register),
+            ("osxaudio", gst_plugin_osxaudio_register),
+            ("gio", gst_plugin_gio_register),
+            ("wavparse", gst_plugin_wavparse_register),
+            ("soup", gst_plugin_soup_register),
+        ];
+
+        for (name, register) in plugins {
+            if register() == 0 {
+                eprintln!("failed to register GStreamer iOS static plugin: {name}");
+            }
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn register_static_plugins() {}
 
 #[cfg(target_os = "android")]
 extern "C" {
     fn gst_audio_android_register_static_plugins();
+}
+
+#[cfg(target_os = "ios")]
+extern "C" {
+    fn gst_plugin_coreelements_register() -> glib::ffi::gboolean;
+    fn gst_plugin_playback_register() -> glib::ffi::gboolean;
+    fn gst_plugin_typefindfunctions_register() -> glib::ffi::gboolean;
+    fn gst_plugin_audioconvert_register() -> glib::ffi::gboolean;
+    fn gst_plugin_audioresample_register() -> glib::ffi::gboolean;
+    fn gst_plugin_volume_register() -> glib::ffi::gboolean;
+    fn gst_plugin_autodetect_register() -> glib::ffi::gboolean;
+    fn gst_plugin_osxaudio_register() -> glib::ffi::gboolean;
+    fn gst_plugin_gio_register() -> glib::ffi::gboolean;
+    fn gst_plugin_wavparse_register() -> glib::ffi::gboolean;
+    fn gst_plugin_soup_register() -> glib::ffi::gboolean;
 }
 
 struct FadeState {
@@ -978,6 +1118,9 @@ fn checked_index(index: i32, len: usize) -> Option<usize> {
 
 fn input_to_uri(input: &str) -> String {
     let trimmed = input.trim();
+    if let Some(asset_path) = trimmed.strip_prefix("asset:///") {
+        return flutter_asset_to_uri(asset_path);
+    }
     if looks_like_uri(trimmed) {
         trimmed.to_string()
     } else {
@@ -1005,6 +1148,28 @@ fn title_from_input(input: &str) -> String {
 
 fn looks_like_uri(input: &str) -> bool {
     input.contains("://") || input.starts_with("file:")
+}
+
+fn flutter_asset_to_uri(asset_path: &str) -> String {
+    let normalized_asset_path = asset_path.trim_start_matches('/');
+
+    #[cfg(target_os = "ios")]
+    {
+        if let Ok(executable) = env::current_exe() {
+            if let Some(app_dir) = executable.parent() {
+                let asset = app_dir
+                    .join("Frameworks")
+                    .join("App.framework")
+                    .join("flutter_assets")
+                    .join(normalized_asset_path);
+                if asset.is_file() {
+                    return gio::File::for_path(asset).uri().to_string();
+                }
+            }
+        }
+    }
+
+    format!("asset:///{normalized_asset_path}")
 }
 
 fn clamp_speed(speed: f64) -> f64 {
