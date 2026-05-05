@@ -72,7 +72,6 @@ class _PlayerPageState extends State<PlayerPage> {
     _newItemController.dispose();
     _manualSeekController.dispose();
     _queueFocus.dispose();
-    player.shutdownPlayer();
     super.dispose();
   }
 

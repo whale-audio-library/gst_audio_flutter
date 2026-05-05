@@ -285,7 +285,9 @@ fn ensure_runtime(runtime: &mut Option<PlayerRuntime>) -> Result<(), String> {
         .unwrap_or(false)
     {
         let finished = runtime.take().expect("runtime existed");
-        finished.join()?;
+        if let Err(err) = finished.join() {
+            eprintln!("Discarding stopped GStreamer player runtime: {err}");
+        }
     }
 
     if runtime.is_none() {
@@ -314,13 +316,8 @@ fn send(command: Command) -> Result<(), String> {
             Err(err) => {
                 command = Some(err.0);
                 if let Some(stopped_runtime) = runtime.take() {
-                    if stopped_runtime.handle.is_finished() {
-                        stopped_runtime.join()?;
-                    } else {
-                        return Err(
-                            "failed to send player command: player command channel closed"
-                                .to_string(),
-                        );
+                    if let Err(err) = stopped_runtime.join() {
+                        eprintln!("Discarding disconnected GStreamer player runtime: {err}");
                     }
                 }
             }
