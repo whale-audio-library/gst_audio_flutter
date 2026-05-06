@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gst_audio_flutter/main.dart';
+import 'package:gst_audio_flutter/src/audio_system_integration.dart';
 import 'package:gst_audio_flutter/src/rust/api/player.dart' as player;
 import 'package:gst_audio_flutter/src/rust/frb_generated.dart';
 import 'package:integration_test/integration_test.dart';
@@ -9,6 +10,7 @@ void main() {
 
   setUpAll(() async {
     await RustLib.init();
+    await initializeAudioSystem();
   });
 
   tearDownAll(() async {

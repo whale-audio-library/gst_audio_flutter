@@ -37,6 +37,8 @@ dependencies:
   gst_audio_core:
     path: rust_builder
   flutter_rust_bridge: 2.11.1
+  audio_service: ^0.18.18
+  audio_session: ^0.2.3
 
 dev_dependencies:
   flutter_test:

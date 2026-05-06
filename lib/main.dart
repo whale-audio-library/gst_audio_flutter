@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:gst_audio_flutter/src/audio_system_integration.dart';
 import 'package:gst_audio_flutter/src/rust/api/player.dart' as player;
 import 'package:gst_audio_flutter/src/rust/frb_generated.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
+  await initializeAudioSystem();
   runApp(const AudioPlayerApp());
 }
 
