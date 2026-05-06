@@ -76,7 +76,23 @@ jobs:
         run: python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
 
       - name: Run Linux audio visualization integration test
-        run: xvfb-run -a flutter test integration_test/audio_visualization_test.dart -d linux
+        run: |
+          python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+          server_pid="$!"
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          server_ready=0
+          for _ in {1..20}; do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:8765/generated/long-30s.wav; then
+              server_ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$server_ready" -ne 1 ]]; then
+            echo "Audio test server did not become ready"
+            exit 1
+          fi
+          xvfb-run -a flutter test integration_test/audio_visualization_test.dart -d linux
         env:
           GST_AUDIO_FLUTTER_AUDIO_SINK: fakesink
 
