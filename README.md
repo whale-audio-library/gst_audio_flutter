@@ -16,6 +16,8 @@ For iOS SDK, unsigned IPA packaging, simulator integration tests, and true-devic
 
 For HTTP buffering progress semantics, implementation notes, and Linux/Android/iOS verification, see [docs/http-buffer-progress.md](docs/http-buffer-progress.md).
 
+For audio visualization implementation notes and platform verification, see [docs/audio-visualization-plan.md](docs/audio-visualization-plan.md).
+
 ## Toolchain
 
 - Flutter SDK used here: `/home/chrome-book/fvm/versions/3.41.6/bin/flutter`
@@ -109,6 +111,7 @@ The Android build statically links GLib, GStreamer core libraries, and the selec
 - Queue modes: sequential, shuffle, repeat one, repeat all
 - Position: current time, duration, millisecond seek
 - Audio controls: volume, mute, fade in, fade out
+- Audio visualization: realtime `spectrum` FFT bars, GStreamer `level` RMS/peak data, smoothing, beat signal, and PCM waveform rendered in Flutter
 - Speed: 0.5x, 1x, 1.5x, 2x
 - Output switching: default output or GStreamer `Audio/Sink` devices exposed by the host
 - Local file paths and HTTP/HTTPS URLs are accepted by the queue
@@ -122,6 +125,7 @@ cd rust && cargo check && cargo test
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter analyze
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter test
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter build linux
+GST_AUDIO_FLUTTER_AUDIO_SINK=fakesink PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter test integration_test/audio_visualization_test.dart -d linux
 ```
 
 Playback smoke test:

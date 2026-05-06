@@ -66,6 +66,17 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path rust/Cargo.toml
 
+      - name: Build Linux desktop app
+        run: flutter build linux
+
+      - name: Generate integration audio fixtures
+        run: python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+
+      - name: Run Linux audio visualization integration test
+        run: xvfb-run -a flutter test integration_test/audio_visualization_test.dart -d linux
+        env:
+          GST_AUDIO_FLUTTER_AUDIO_SINK: fakesink
+
   android-apk:
     name: Android APK build
     runs-on: ubuntu-latest

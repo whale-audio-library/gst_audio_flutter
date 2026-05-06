@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 771177210;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -360787145;
 
 // Section: executor
 
@@ -137,6 +137,38 @@ fn wire__crate__api__player__get_state_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::player::get_state()?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__player__get_visualization_frame_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_visualization_frame",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::player::get_visualization_frame()?;
                     Ok(output_ok)
                 })())
             }
@@ -812,6 +844,18 @@ impl SseDecode for Vec<crate::api::player::AudioOutputDevice> {
     }
 }
 
+impl SseDecode for Vec<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = vec![];
+        for idx_ in 0..len_ {
+            ans_.push(<f64>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<u8> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -915,6 +959,40 @@ impl SseDecode for () {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
 }
 
+impl SseDecode for crate::api::player::VisualizationFrame {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_timestampMs = <i64>::sse_decode(deserializer);
+        let mut var_pcm = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_magnitude = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_rms = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_peak = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_decay = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_rmsNormalized = <f64>::sse_decode(deserializer);
+        let mut var_peakNormalized = <f64>::sse_decode(deserializer);
+        let mut var_beat = <bool>::sse_decode(deserializer);
+        let mut var_beatStrength = <f64>::sse_decode(deserializer);
+        let mut var_waveform = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_normalized = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_isActive = <bool>::sse_decode(deserializer);
+        return crate::api::player::VisualizationFrame {
+            timestamp_ms: var_timestampMs,
+            pcm: var_pcm,
+            magnitude: var_magnitude,
+            rms: var_rms,
+            peak: var_peak,
+            decay: var_decay,
+            rms_normalized: var_rmsNormalized,
+            peak_normalized: var_peakNormalized,
+            beat: var_beat,
+            beat_strength: var_beatStrength,
+            waveform: var_waveform,
+            normalized: var_normalized,
+            is_active: var_isActive,
+        };
+    }
+}
+
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -927,24 +1005,30 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => wire__crate__api__player__fade_in_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__player__fade_out_impl(port, ptr, rust_vec_len, data_len),
         3 => wire__crate__api__player__get_state_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__player__init_app_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__player__list_output_devices_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__player__next_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__player__pause_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__player__play_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__player__play_index_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__player__previous_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__player__seek_ms_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__player__set_muted_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__player__set_output_device_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__player__set_playlist_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__player__set_repeat_mode_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__player__set_shuffle_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__player__set_speed_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__player__set_volume_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__player__shutdown_player_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__player__stop_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__player__toggle_play_pause_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__player__get_visualization_frame_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        5 => wire__crate__api__player__init_app_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__player__list_output_devices_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__player__next_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__player__pause_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__player__play_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__player__play_index_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__player__previous_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__player__seek_ms_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__player__set_muted_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__player__set_output_device_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__player__set_playlist_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__player__set_repeat_mode_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__player__set_shuffle_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__player__set_speed_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__player__set_volume_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__player__shutdown_player_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__player__stop_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__player__toggle_play_pause_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1060,6 +1144,38 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::player::Track> for crate::api
         self
     }
 }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::player::VisualizationFrame {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.timestamp_ms.into_into_dart().into_dart(),
+            self.pcm.into_into_dart().into_dart(),
+            self.magnitude.into_into_dart().into_dart(),
+            self.rms.into_into_dart().into_dart(),
+            self.peak.into_into_dart().into_dart(),
+            self.decay.into_into_dart().into_dart(),
+            self.rms_normalized.into_into_dart().into_dart(),
+            self.peak_normalized.into_into_dart().into_dart(),
+            self.beat.into_into_dart().into_dart(),
+            self.beat_strength.into_into_dart().into_dart(),
+            self.waveform.into_into_dart().into_dart(),
+            self.normalized.into_into_dart().into_dart(),
+            self.is_active.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::player::VisualizationFrame
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::player::VisualizationFrame>
+    for crate::api::player::VisualizationFrame
+{
+    fn into_into_dart(self) -> crate::api::player::VisualizationFrame {
+        self
+    }
+}
 
 impl SseEncode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -1122,6 +1238,16 @@ impl SseEncode for Vec<crate::api::player::AudioOutputDevice> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::player::AudioOutputDevice>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <f64>::sse_encode(item, serializer);
         }
     }
 }
@@ -1204,6 +1330,25 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
+}
+
+impl SseEncode for crate::api::player::VisualizationFrame {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.timestamp_ms, serializer);
+        <Vec<f64>>::sse_encode(self.pcm, serializer);
+        <Vec<f64>>::sse_encode(self.magnitude, serializer);
+        <Vec<f64>>::sse_encode(self.rms, serializer);
+        <Vec<f64>>::sse_encode(self.peak, serializer);
+        <Vec<f64>>::sse_encode(self.decay, serializer);
+        <f64>::sse_encode(self.rms_normalized, serializer);
+        <f64>::sse_encode(self.peak_normalized, serializer);
+        <bool>::sse_encode(self.beat, serializer);
+        <f64>::sse_encode(self.beat_strength, serializer);
+        <Vec<f64>>::sse_encode(self.waveform, serializer);
+        <Vec<f64>>::sse_encode(self.normalized, serializer);
+        <bool>::sse_encode(self.is_active, serializer);
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]

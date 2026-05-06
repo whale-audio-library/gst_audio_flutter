@@ -139,17 +139,17 @@ void main() {
     final stoppedState = await player.getState();
     expectTrue(!stoppedState.isBuffering, 'stopped player should not buffer');
 
-    final recoveredState = await _playAndWaitForProgress(
-      const _AudioCase(
-        label: 'recovery-wav',
-        uri: 'http://127.0.0.1:8765/tone.wav',
-        minDurationMs: 500,
-      ),
+    const recoveryCase = _AudioCase(
+      label: 'recovery-wav',
+      uri: 'http://127.0.0.1:8765/tone.wav',
+      minDurationMs: 500,
     );
+    final recoveredState = await _playAndWaitForProgress(recoveryCase);
     expect(recoveredState.lastError, isEmpty);
     expectTrue(
-      recoveredState.positionMs > 0,
-      'recovery fixture should make playback progress',
+      _hasPlaybackActivity(recoveredState, recoveryCase.uri),
+      'recovery fixture should report playback activity: '
+      '${_stateSample(recoveredState)}',
     );
   });
 
@@ -347,4 +347,11 @@ bool _hasPlaybackActivity(player.PlaybackState state, String uri) {
           state.positionMs > 0 ||
           state.durationMs > 0 ||
           state.sawPartialBuffer);
+}
+
+String _stateSample(player.PlaybackState state) {
+  return 'uri=${state.currentUri} index=${state.currentIndex} '
+      'playing=${state.isPlaying} buffering=${state.isBuffering} '
+      'position=${state.positionMs} duration=${state.durationMs} '
+      'buffer=${state.bufferingPercent} error=${state.lastError}';
 }
