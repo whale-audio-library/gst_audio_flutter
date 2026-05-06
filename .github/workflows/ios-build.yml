@@ -269,19 +269,51 @@ jobs:
           done
 
           test_status=0
+          terminate_runner() {
+            xcrun simctl terminate "$simulator_id" com.example.gstAudioFlutter >/dev/null 2>&1 || true
+          }
+
           run_flutter_test() {
             local label="$1"
             local test_file="$2"
             local log_file="$3"
+            local timeout_seconds=1200
+            local elapsed=0
+            local status=0
 
             echo "::group::${label}"
             echo "Started ${label} at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+            terminate_runner
             set +e
             GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
-              flutter test "$test_file" -d "$simulator_id" --reporter expanded 2>&1 \
-                | tee "$log_file"
-            local status="${PIPESTATUS[0]}"
+              flutter test "$test_file" -d "$simulator_id" --reporter expanded \
+                > >(tee "$log_file") 2>&1 &
+            local flutter_pid="$!"
+
+            while kill -0 "$flutter_pid" 2>/dev/null; do
+              if [[ "$elapsed" -ge "$timeout_seconds" ]]; then
+                echo "Timed out ${label} after ${timeout_seconds} seconds" | tee -a "$log_file"
+                terminate_runner
+                pkill -TERM -P "$flutter_pid" >/dev/null 2>&1 || true
+                kill -TERM "$flutter_pid" >/dev/null 2>&1 || true
+                sleep 5
+                pkill -KILL -P "$flutter_pid" >/dev/null 2>&1 || true
+                kill -KILL "$flutter_pid" >/dev/null 2>&1 || true
+                status=124
+                break
+              fi
+              sleep 5
+              elapsed=$((elapsed + 5))
+            done
+
+            if [[ "$status" -eq 0 ]]; then
+              wait "$flutter_pid"
+              status="$?"
+            else
+              wait "$flutter_pid" >/dev/null 2>&1 || true
+            fi
             set -e
+            terminate_runner
             echo "Finished ${label} with status ${status} at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
             echo "::endgroup::"
             return "$status"
