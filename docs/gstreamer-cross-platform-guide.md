@@ -342,6 +342,8 @@ Android 模拟器再加：
 http://127.0.0.1:8765/tone.wav
 ```
 
+HTTP 缓冲进度的 UI 语义、Rust 侧实现和 Linux/Android/iOS 验证记录见 [HTTP Buffer Progress](http-buffer-progress.md)。注意：GStreamer `Buffering` message 的百分比表示内部队列状态，不等于 HTTP 文件真实下载百分比。
+
 ## 插件策略
 
 桌面平台通常动态扫描系统插件，因此开发时更方便，但发布时要考虑目标机器插件是否齐全。

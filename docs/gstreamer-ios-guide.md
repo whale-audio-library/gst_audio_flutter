@@ -375,13 +375,18 @@ cp -R /path/to/Runner.app "$payload_dir/Runner.app"
 
 ```text
 integration_test/ios_playback_test.dart
+integration_test/http_buffer_progress_test.dart
+integration_test/audio_matrix_test.dart
 ```
 
 覆盖：
 
 - bundle WAV 启动播放。
 - HTTP WAV 启动播放。
+- HTTP 缓冲进度按真实下载字节数推进。
+- 多格式 HTTP 音频矩阵，包括 FLAC、OGG Vorbis、OGG Opus 和较大 WAV。
 - 播放控制：play、pause、resume、next、previous。
+- 慢速 HTTP、断流恢复和快速切歌。
 
 CI 命令核心：
 
@@ -393,7 +398,13 @@ python3 -m http.server 8765 --directory test-assets &
 
 GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
   flutter test integration_test/ios_playback_test.dart -d "$simulator_id"
+GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+  flutter test integration_test/http_buffer_progress_test.dart -d "$simulator_id"
+GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+  flutter test integration_test/audio_matrix_test.dart -d "$simulator_id"
 ```
+
+HTTP 缓冲进度的定义、实现和跨平台测试记录见 [HTTP Buffer Progress](http-buffer-progress.md)。
 
 本地 macOS 运行时，先确认 simulator slice 存在：
 

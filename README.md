@@ -14,6 +14,8 @@ For Android-only SDK/static-plugin/APK details, see [docs/gstreamer-android-guid
 
 For iOS SDK, unsigned IPA packaging, simulator integration tests, and true-device troubleshooting, see [docs/gstreamer-ios-guide.md](docs/gstreamer-ios-guide.md).
 
+For HTTP buffering progress semantics, implementation notes, and Linux/Android/iOS verification, see [docs/http-buffer-progress.md](docs/http-buffer-progress.md).
+
 ## Toolchain
 
 - Flutter SDK used here: `/home/chrome-book/fvm/versions/3.41.6/bin/flutter`
