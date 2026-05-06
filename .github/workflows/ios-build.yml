@@ -252,6 +252,11 @@ jobs:
               OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox"
           echo "::endgroup::"
 
+          xcrun simctl boot "$simulator_id" || true
+          xcrun simctl bootstatus "$simulator_id" -b
+          xcrun simctl list devices "$simulator_id" || true
+          flutter devices
+
           python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
           python3 tool/audio_test_server.py --port 8765 --directory test-assets &
           server_pid="$!"
