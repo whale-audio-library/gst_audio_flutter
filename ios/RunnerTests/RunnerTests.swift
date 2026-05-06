@@ -1,12 +1,23 @@
 import Flutter
 import UIKit
 import XCTest
+import AVFoundation
 
 class RunnerTests: XCTestCase {
 
-  func testExample() {
-    // If you add code to the Runner application, consider adding tests here.
-    // See https://developer.apple.com/documentation/xctest for more information about using XCTest.
+  func testBackgroundAudioModeIsDeclared() {
+    let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]
+    XCTAssertNotNil(modes)
+    XCTAssertTrue(modes?.contains("audio") == true)
+  }
+
+  func testAudioSessionUsesPlaybackCategory() throws {
+    let session = AVAudioSession.sharedInstance()
+
+    try session.setCategory(.playback, mode: .default)
+    try session.setActive(true)
+
+    XCTAssertEqual(session.category, .playback)
   }
 
 }

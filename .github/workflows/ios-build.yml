@@ -232,6 +232,26 @@ jobs:
           xcrun simctl list devices "$simulator_id" || true
           flutter devices
 
+          echo "::group::iOS native audio permission tests"
+          GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+            xcodebuild test \
+              -workspace ios/Runner.xcworkspace \
+              -scheme Runner \
+              -configuration Debug \
+              -destination "id=${simulator_id}" \
+              -only-testing:RunnerTests \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="" \
+              PROVISIONING_PROFILE="" \
+              PROVISIONING_PROFILE_SPECIFIER="" \
+              GSTREAMER_IOS_LIBRARY_DIR="${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
+              LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
+              OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox"
+          echo "::endgroup::"
+
           python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
           python3 tool/audio_test_server.py --port 8765 --directory test-assets &
           server_pid="$!"

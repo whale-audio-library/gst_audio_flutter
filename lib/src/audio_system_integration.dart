@@ -108,6 +108,16 @@ class GstAudioHandler extends audio_service.BaseAudioHandler
       _broadcastState(state);
       return;
     }
+    if (button == audio_service.MediaButton.next) {
+      final state = await player.next();
+      _broadcastState(state);
+      return;
+    }
+    if (button == audio_service.MediaButton.previous) {
+      final state = await player.previous();
+      _broadcastState(state);
+      return;
+    }
     await super.click(button);
   }
 
