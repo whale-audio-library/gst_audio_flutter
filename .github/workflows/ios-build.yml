@@ -231,7 +231,7 @@ jobs:
           fi
           simulator_name="$(
             xcrun simctl list devices "$simulator_id" \
-              | sed -n 's/^[[:space:]]*\\([^()]*[^[:space:]]\\)[[:space:]]*(.*$/\\1/p' \
+              | sed -n 's/^[[:space:]]*\([^()]*[^[:space:]]\)[[:space:]]*(.*$/\1/p' \
               | head -n 1
           )"
           if [[ -z "$simulator_name" ]]; then
