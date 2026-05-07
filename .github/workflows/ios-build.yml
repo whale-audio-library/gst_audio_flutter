@@ -148,6 +148,12 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Install Patrol CLI
+        run: dart pub global activate patrol_cli 4.3.1
+
+      - name: Verify native audio Patrol setup
+        run: python3 tool/verify_native_audio_patrol_setup.py
+
       - name: Generate iOS build configuration
         run: flutter build ios --release --config-only --no-codesign
 
@@ -323,6 +329,26 @@ jobs:
             "iOS playback integration tests" \
             integration_test/ios_playback_test.dart \
             "$log_dir/flutter-test.log" || test_status=$?
+
+          if [[ "$test_status" -eq 0 ]]; then
+            echo "::group::iOS Patrol native audio simulator test"
+            terminate_runner
+            set +e
+            PATH="$PATH:$HOME/.pub-cache/bin" \
+            CI=true \
+            PATROL_ANALYTICS_ENABLED=false \
+            GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+              patrol test \
+                --target patrol_test/native_audio_controls_test.dart \
+                --device "$simulator_id" \
+                --no-label \
+                --show-flutter-logs \
+                > >(tee "$log_dir/patrol-native-audio-test.log") 2>&1
+            test_status="$?"
+            set -e
+            terminate_runner
+            echo "::endgroup::"
+          fi
 
           if [[ "$test_status" -eq 0 ]]; then
             run_flutter_test \

@@ -56,6 +56,9 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Verify native audio Patrol setup
+        run: python3 tool/verify_native_audio_patrol_setup.py
+
       - name: Get cargokit build tool dependencies
         run: dart pub get
         working-directory: rust_builder/cargokit/build_tool
@@ -122,6 +125,15 @@ jobs:
           sudo rm -rf \
             /usr/share/dotnet \
             /opt/ghc \
+            /usr/local/share/boost
+          docker image prune -af || true
+          df -h
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
             /usr/local/share/boost \
             /usr/local/lib/android/sdk/emulator \
             /usr/local/lib/android/sdk/system-images
@@ -178,3 +190,103 @@ jobs:
           name: gst-audio-flutter-android-x64-release
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+  android-patrol:
+    name: Android Patrol native audio test
+    runs-on: ubuntu-latest
+
+    env:
+      GSTREAMER_VERSION: 1.28.2
+      GSTREAMER_SHA256: ba9f1c6e10f0736fbf48cd741634fa90e49d50c961a4454230040b2517490d2a
+      GSTREAMER_ROOT_ANDROID: ${{ github.workspace }}/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
+      CARGO_BUILD_JOBS: "1"
+      RUST_MIN_STACK: "33554432"
+      PATROL_ANALYTICS_ENABLED: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            xz-utils
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.6
+          cache: true
+
+      - name: Cache GStreamer Android SDK
+        id: cache-gstreamer-android-patrol
+        uses: actions/cache@v5
+        with:
+          path: .cache/gstreamer-android/gstreamer-1.0-android-universal-${{ env.GSTREAMER_VERSION }}
+          key: gstreamer-android-${{ env.GSTREAMER_VERSION }}-${{ env.GSTREAMER_SHA256 }}
+
+      - name: Download GStreamer Android SDK
+        if: steps.cache-gstreamer-android-patrol.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache/gstreamer-android
+          cd .cache/gstreamer-android
+          curl -fsSLO "https://gstreamer.freedesktop.org/pkg/android/${GSTREAMER_VERSION}/gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz"
+          echo "${GSTREAMER_SHA256}  gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz" | sha256sum -c -
+          mkdir -p "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}"
+          tar -xJf "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz" \
+            -C "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}"
+          rm "gstreamer-1.0-android-universal-${GSTREAMER_VERSION}.tar.xz"
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Install Patrol CLI
+        run: dart pub global activate patrol_cli 4.3.1
+
+      - name: Generate integration audio fixtures
+        run: python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+
+      - name: Run Android Patrol native audio test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          script: |
+            python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+            server_pid="$!"
+            trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+            server_ready=0
+            for _ in {1..20}; do
+              if curl --fail --silent --output /dev/null http://127.0.0.1:8765/generated/long-30s.wav; then
+                server_ready=1
+                break
+              fi
+              sleep 1
+            done
+            if [[ "$server_ready" -ne 1 ]]; then
+              echo "Audio test server did not become ready"
+              exit 1
+            fi
+            adb reverse tcp:8765 tcp:8765
+            PATH="$PATH:$HOME/.pub-cache/bin" \
+            CI=true \
+              patrol test \
+                --target patrol_test/native_audio_controls_test.dart \
+                --device emulator-5554 \
+                --no-label \
+                --show-flutter-logs
