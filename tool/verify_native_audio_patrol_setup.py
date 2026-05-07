@@ -119,6 +119,8 @@ def verify_ios() -> list[str]:
         errors.append("iOS RunnerUITests target is missing")
     if "xcode_backend build" not in project or "xcode_backend embed_and_thin" not in project:
         errors.append("iOS RunnerUITests Flutter build phases are missing")
+    if project.count("FLUTTER_BUILD_DIR = build;") < 3:
+        errors.append("iOS RunnerUITests lacks FLUTTER_BUILD_DIR for Flutter scripts")
 
     ui_test = Path("ios/RunnerUITests/RunnerUITests.m")
     if not ui_test.exists():
