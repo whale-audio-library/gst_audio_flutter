@@ -332,13 +332,44 @@ jobs:
           CI=true \
           PATROL_ANALYTICS_ENABLED=false \
           GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
-            patrol --verbose test \
+            patrol --verbose build ios \
               --target patrol_test/native_audio_controls_test.dart \
-              --device "$simulator_id" \
+              --simulator \
               --no-label \
-              --show-flutter-logs \
               > >(tee "$log_dir/patrol-native-audio-test.log") 2>&1
-          test_status="$?"
+          patrol_build_status="$?"
+          test_status="$patrol_build_status"
+
+          if [[ "$patrol_build_status" -eq 0 ]]; then
+            xctestrun_path="$(
+              find "$GITHUB_WORKSPACE/build/ios_integ/Build/Products" \
+                -type f \
+                -name 'Runner_iphonesimulator*.xctestrun' \
+                -print -quit
+            )"
+
+            if [[ -z "$xctestrun_path" ]]; then
+              echo "Patrol iOS xctestrun file was not found" \
+                | tee -a "$log_dir/patrol-native-audio-test.log"
+              test_status=1
+            else
+              echo "Using Patrol xctestrun at $xctestrun_path" \
+                | tee -a "$log_dir/patrol-native-audio-test.log"
+              xcrun simctl uninstall "$simulator_id" com.example.gstAudioFlutter >/dev/null 2>&1 || true
+              xcrun simctl uninstall "$simulator_id" com.example.gstAudioFlutter.RunnerUITests.xctrunner >/dev/null 2>&1 || true
+
+              TEST_RUNNER_PATROL_TEST_PORT=8081 \
+              TEST_RUNNER_PATROL_APP_PORT=8082 \
+              xcodebuild test-without-building \
+                -xctestrun "$xctestrun_path" \
+                -only-testing RunnerUITests/RunnerUITests \
+                -destination "id=${simulator_id}" \
+                -destination-timeout 1 \
+                -resultBundlePath "$GITHUB_WORKSPACE/build/ios_results_patrol_native_audio.xcresult" \
+                > >(tee -a "$log_dir/patrol-native-audio-test.log") 2>&1
+              test_status="$?"
+            fi
+          fi
           set -e
           terminate_runner
           echo "::endgroup::"
@@ -387,7 +418,7 @@ jobs:
           find build \
             -maxdepth 1 \
             -type d \
-            -name 'ios_results_*.xcresult' \
+            -name 'ios_results*.xcresult' \
             -print \
             -exec cp -R {} "$log_dir/" \; 2>/dev/null || true
 
