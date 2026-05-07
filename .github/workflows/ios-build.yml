@@ -318,7 +318,6 @@ jobs:
             GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
               flutter test "$test_file" \
                 -d "$simulator_name" \
-                --device-timeout 120 \
                 --reporter expanded \
                 > >(tee "$log_file") 2>&1 &
             local flutter_pid="$!"
