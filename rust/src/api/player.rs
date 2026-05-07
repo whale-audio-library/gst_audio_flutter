@@ -1,6 +1,7 @@
 use std::{
     collections::VecDeque,
     env,
+    panic::{self, AssertUnwindSafe},
     path::Path,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -712,21 +713,25 @@ impl GStreamerPlayer {
         let downloaded_bytes = Arc::new(AtomicU64::new(0));
         let probe_downloaded_bytes = Arc::clone(&downloaded_bytes);
         playbin.connect("source-setup", false, move |values| {
-            if let Some(source) = values
-                .get(1)
-                .and_then(|value| value.get::<gst::Element>().ok())
-            {
-                install_download_probe(&source, &probe_downloaded_bytes);
-            }
+            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                if let Some(source) = values
+                    .get(1)
+                    .and_then(|value| value.get::<gst::Element>().ok())
+                {
+                    install_download_probe(&source, &probe_downloaded_bytes);
+                }
+            }));
             None
         });
         playbin.connect("element-setup", false, move |values| {
-            if let Some(element) = values
-                .get(1)
-                .and_then(|value| value.get::<gst::Element>().ok())
-            {
-                configure_download_buffer(&element);
-            }
+            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+                if let Some(element) = values
+                    .get(1)
+                    .and_then(|value| value.get::<gst::Element>().ok())
+                {
+                    configure_download_buffer(&element);
+                }
+            }));
             None
         });
         let visualization_pcm = Arc::new(Mutex::new(Vec::new()));
@@ -1627,6 +1632,10 @@ fn configure_download_buffer(element: &gst::Element) {
     }
 
     let temp_template = env::temp_dir().join("gst-audio-download-XXXXXX");
+    if element.find_property("temp-template").is_none() {
+        return;
+    }
+
     if let Some(template) = temp_template.to_str() {
         element.set_property("temp-template", template);
     }
