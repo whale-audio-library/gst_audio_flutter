@@ -332,7 +332,7 @@ jobs:
           CI=true \
           PATROL_ANALYTICS_ENABLED=false \
           GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
-            patrol test \
+            patrol --verbose test \
               --target patrol_test/native_audio_controls_test.dart \
               --device "$simulator_id" \
               --no-label \
@@ -383,6 +383,13 @@ jobs:
             \( -name 'Runner*.crash' -o -name 'Runner*.ips' \) \
             -print \
             -exec cp {} "$log_dir/" \; 2>/dev/null || true
+
+          find build \
+            -maxdepth 1 \
+            -type d \
+            -name 'ios_results_*.xcresult' \
+            -print \
+            -exec cp -R {} "$log_dir/" \; 2>/dev/null || true
 
           exit "$test_status"
 
