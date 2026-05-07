@@ -325,29 +325,29 @@ jobs:
             return "$status"
           }
 
-          run_flutter_test \
-            "iOS playback integration tests" \
-            integration_test/ios_playback_test.dart \
-            "$log_dir/flutter-test.log" || test_status=$?
+          echo "::group::iOS Patrol native audio simulator test"
+          terminate_runner
+          set +e
+          PATH="$PATH:$HOME/.pub-cache/bin" \
+          CI=true \
+          PATROL_ANALYTICS_ENABLED=false \
+          GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+            patrol test \
+              --target patrol_test/native_audio_controls_test.dart \
+              --device "$simulator_id" \
+              --no-label \
+              --show-flutter-logs \
+              > >(tee "$log_dir/patrol-native-audio-test.log") 2>&1
+          test_status="$?"
+          set -e
+          terminate_runner
+          echo "::endgroup::"
 
           if [[ "$test_status" -eq 0 ]]; then
-            echo "::group::iOS Patrol native audio simulator test"
-            terminate_runner
-            set +e
-            PATH="$PATH:$HOME/.pub-cache/bin" \
-            CI=true \
-            PATROL_ANALYTICS_ENABLED=false \
-            GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
-              patrol test \
-                --target patrol_test/native_audio_controls_test.dart \
-                --device "$simulator_id" \
-                --no-label \
-                --show-flutter-logs \
-                > >(tee "$log_dir/patrol-native-audio-test.log") 2>&1
-            test_status="$?"
-            set -e
-            terminate_runner
-            echo "::endgroup::"
+            run_flutter_test \
+              "iOS playback integration tests" \
+              integration_test/ios_playback_test.dart \
+              "$log_dir/flutter-test.log" || test_status=$?
           fi
 
           if [[ "$test_status" -eq 0 ]]; then

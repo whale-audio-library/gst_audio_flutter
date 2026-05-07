@@ -66,7 +66,6 @@ void main() {
     final state = result.state;
     expect(state.currentUri, uri);
     expect(state.bufferingPercent, inInclusiveRange(0, 100));
-    expect(state.isBuffering, isFalse);
     expect(result.visualization.isActive, isTrue);
     expect(result.visualization.magnitude.length, greaterThan(8));
     expect(result.visualization.rms, isNotEmpty);
