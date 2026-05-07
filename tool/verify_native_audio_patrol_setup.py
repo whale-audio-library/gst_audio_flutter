@@ -121,8 +121,14 @@ def verify_ios() -> list[str]:
         errors.append("iOS RunnerUITests Flutter build phases are missing")
 
     ui_test = Path("ios/RunnerUITests/RunnerUITests.m")
-    if not ui_test.exists() or "PATROL_INTEGRATION_TEST_IOS_RUNNER" not in ui_test.read_text():
+    if not ui_test.exists():
         errors.append("iOS Patrol RunnerUITests.m is missing")
+    else:
+        ui_test_text = ui_test.read_text()
+        if "PATROL_INTEGRATION_TEST_IOS_RUNNER" not in ui_test_text:
+            errors.append("iOS Patrol RunnerUITests.m is missing")
+        if "CLEAR_PERMISSIONS" not in ui_test_text or "FULL_ISOLATION" not in ui_test_text:
+            errors.append("iOS Patrol runner compile-time flags are missing")
 
     podfile = Path("ios/Podfile")
     if not podfile.exists():
