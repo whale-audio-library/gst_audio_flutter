@@ -188,18 +188,13 @@ jobs:
           )"
 
           if [[ -n "$pr_number" ]]; then
+            comment_body=$'iOS tmate debug session is ready.\n\n```bash\n'
+            comment_body+="${TMATE_SSH_COMMAND}"
+            comment_body+=$'\n```\n\nRun: '
+            comment_body+="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             gh pr comment "$pr_number" \
               --repo "$GITHUB_REPOSITORY" \
-              --body "$(cat <<EOF
-iOS tmate debug session is ready.
-
-\`\`\`bash
-${TMATE_SSH_COMMAND}
-\`\`\`
-
-Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-EOF
-)"
+              --body "$comment_body"
           fi
 
       - name: Run iOS simulator integration tests
