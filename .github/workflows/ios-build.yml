@@ -229,17 +229,7 @@ jobs:
             xcrun simctl list devices available
             exit 1
           fi
-          simulator_name="$(
-            xcrun simctl list devices "$simulator_id" \
-              | sed -n 's/^[[:space:]]*\([^()]*[^[:space:]]\)[[:space:]]*(.*$/\1/p' \
-              | head -n 1
-          )"
-          if [[ -z "$simulator_name" ]]; then
-            xcrun simctl list devices "$simulator_id"
-            exit 1
-          fi
           echo "$simulator_id" > "$log_dir/simulator-id.txt"
-          echo "$simulator_name" > "$log_dir/simulator-name.txt"
 
           xcrun simctl shutdown "$simulator_id" || true
           xcrun simctl erase "$simulator_id"
@@ -253,6 +243,16 @@ jobs:
             fi
             sleep 2
           done
+          simulator_name="$(
+            sed -n 's/^\(.*\) (mobile) • '"$simulator_id"' • ios.*/\1/p' \
+              "$log_dir/flutter-devices-initial.txt" \
+              | head -n 1
+          )"
+          if [[ -z "$simulator_name" ]]; then
+            cat "$log_dir/flutter-devices-initial.txt"
+            exit 1
+          fi
+          echo "$simulator_name" > "$log_dir/simulator-name.txt"
           flutter devices
 
           echo "::group::iOS native audio permission tests"
