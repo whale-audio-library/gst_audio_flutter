@@ -162,8 +162,8 @@ jobs:
         if: ${{ github.event.inputs.debug_tmate == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          TMATE_SSH_COMMAND: ${{ steps.tmate.outputs.ssh-command }}
-          TMATE_WEB_URL: ${{ steps.tmate.outputs.web-url }}
+          TMATE_SSH_COMMAND: ${{ steps.tmate.outputs['ssh-command'] }}
+          TMATE_WEB_URL: ${{ steps.tmate.outputs['web-url'] }}
         run: |
           set -euo pipefail
           branch_name="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
