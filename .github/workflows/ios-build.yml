@@ -244,7 +244,7 @@ jobs:
             sleep 2
           done
           simulator_name="$(
-            sed -n 's/^\(.*\) (mobile) • '"$simulator_id"' • ios.*/\1/p' \
+            sed -n 's/^[[:space:]]*\(.*\) (mobile) • '"$simulator_id"' • ios.*/\1/p' \
               "$log_dir/flutter-devices-initial.txt" \
               | head -n 1
           )"
