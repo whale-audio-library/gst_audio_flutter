@@ -229,17 +229,22 @@ jobs:
           log_dir="$RUNNER_TEMP/ios-integration-logs"
           mkdir -p "$log_dir"
 
+          xcrun simctl shutdown all || true
+          xcrun simctl delete unavailable || true
+
+          simulator_name="CI iPhone 16 Pro"
           simulator_id="$(
-            xcrun simctl list devices available \
-              | grep -E 'iPhone .*\([0-9A-F-]{36}\) \((Shutdown|Booted)\)' \
-              | head -n 1 \
-              | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/'
+            xcrun simctl create \
+              "$simulator_name" \
+              com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro \
+              com.apple.CoreSimulator.SimRuntime.iOS-18-5
           )"
           if [[ -z "$simulator_id" ]]; then
-            xcrun simctl list devices available
+            echo "Failed to create iOS simulator"
             exit 1
           fi
           echo "$simulator_id" > "$log_dir/simulator-id.txt"
+          echo "$simulator_name" > "$log_dir/simulator-name.txt"
 
           xcrun simctl shutdown "$simulator_id" || true
           xcrun simctl erase "$simulator_id"
@@ -253,16 +258,6 @@ jobs:
             fi
             sleep 2
           done
-          simulator_name="$(
-            sed -n 's/^[[:space:]]*\(.*\) (mobile) • '"$simulator_id"' • ios.*/\1/p' \
-              "$log_dir/flutter-devices-initial.txt" \
-              | head -n 1
-          )"
-          if [[ -z "$simulator_name" ]]; then
-            cat "$log_dir/flutter-devices-initial.txt"
-            exit 1
-          fi
-          echo "$simulator_name" > "$log_dir/simulator-name.txt"
           flutter devices
 
           echo "::group::iOS native audio permission tests"
@@ -421,12 +416,7 @@ jobs:
               fi
               sleep 2
             done
-            simulator_name="$(
-              sed -n 's/^[[:space:]]*\(.*\) (mobile) • '"$simulator_id"' • ios.*/\1/p' \
-                "$log_dir/flutter-devices-after-patrol.txt" \
-                | head -n 1
-            )"
-            if [[ -z "$simulator_name" ]]; then
+            if ! grep -q "$simulator_id" "$log_dir/flutter-devices-after-patrol.txt"; then
               cat "$log_dir/flutter-devices-after-patrol.txt"
               test_status=1
             fi
@@ -479,6 +469,8 @@ jobs:
             -name 'ios_results*.xcresult' \
             -print \
             -exec cp -R {} "$log_dir/" \; 2>/dev/null || true
+
+          xcrun simctl delete "$simulator_id" >/dev/null 2>&1 || true
 
           exit "$test_status"
 
