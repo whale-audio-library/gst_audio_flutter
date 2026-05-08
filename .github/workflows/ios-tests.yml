@@ -23,6 +23,7 @@ permissions:
 env:
   GSTREAMER_IOS_VERSION: 1.28.2
   GSTREAMER_IOS_XCFRAMEWORK_SHA256: c2e538da4430c73ac0fdf20db635dc342142cd401cf9e9b00b94dcbb9ccba542
+  IOS_SIMULATOR_ARCHS: arm64
 
 jobs:
   ios-tests:
@@ -250,6 +251,9 @@ jobs:
               DEVELOPMENT_TEAM="" \
               PROVISIONING_PROFILE="" \
               PROVISIONING_PROFILE_SPECIFIER="" \
+              ARCHS="${IOS_SIMULATOR_ARCHS}" \
+              ONLY_ACTIVE_ARCH=YES \
+              EXCLUDED_ARCHS=x86_64 \
               GSTREAMER_IOS_LIBRARY_DIR="${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
               LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
               OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox"
@@ -295,6 +299,9 @@ jobs:
             echo "Started ${label} at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
             terminate_runner
             set +e
+            ARCHS="${IOS_SIMULATOR_ARCHS}" \
+            ONLY_ACTIVE_ARCH=YES \
+            EXCLUDED_ARCHS=x86_64 \
             GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
               flutter test "$test_file" \
                 -d "$simulator_name" \
@@ -337,6 +344,9 @@ jobs:
           PATH="$PATH:$HOME/.pub-cache/bin" \
           CI=true \
           PATROL_ANALYTICS_ENABLED=false \
+          ARCHS="${IOS_SIMULATOR_ARCHS}" \
+          ONLY_ACTIVE_ARCH=YES \
+          EXCLUDED_ARCHS=x86_64 \
           GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
             patrol --verbose build ios \
               --target patrol_test/native_audio_controls_test.dart \
@@ -366,6 +376,9 @@ jobs:
 
               TEST_RUNNER_PATROL_TEST_PORT=8081 \
               TEST_RUNNER_PATROL_APP_PORT=8082 \
+              ARCHS="${IOS_SIMULATOR_ARCHS}" \
+              ONLY_ACTIVE_ARCH=YES \
+              EXCLUDED_ARCHS=x86_64 \
               xcodebuild test-without-building \
                 -xctestrun "$xctestrun_path" \
                 -only-testing RunnerUITests/RunnerUITests \
