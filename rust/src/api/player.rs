@@ -723,17 +723,6 @@ impl GStreamerPlayer {
             }));
             None
         });
-        playbin.connect("element-setup", false, move |values| {
-            let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-                if let Some(element) = values
-                    .get(1)
-                    .and_then(|value| value.get::<gst::Element>().ok())
-                {
-                    configure_download_buffer(&element);
-                }
-            }));
-            None
-        });
         let visualization_pcm = Arc::new(Mutex::new(Vec::new()));
         let (audio_sink, volume_element) =
             build_audio_sink(None, 1.0, false, Arc::clone(&visualization_pcm))?;
@@ -1573,7 +1562,6 @@ fn install_download_probe(element: &gst::Element, downloaded_bytes: &Arc<AtomicU
 
     if let Some(bin) = element.dynamic_cast_ref::<gst::Bin>() {
         for child in bin.iterate_recurse().into_iter().flatten() {
-            configure_download_buffer(&child);
             if install_download_probe(&child, downloaded_bytes) {
                 return true;
             }
@@ -1619,26 +1607,6 @@ fn install_download_probe_on_source(
         gst::PadProbeReturn::Ok
     });
     true
-}
-
-fn configure_download_buffer(element: &gst::Element) {
-    if element
-        .factory()
-        .map(|factory| factory.name().to_string())
-        .as_deref()
-        != Some("downloadbuffer")
-    {
-        return;
-    }
-
-    let temp_template = env::temp_dir().join("gst-audio-download-XXXXXX");
-    if element.find_property("temp-template").is_none() {
-        return;
-    }
-
-    if let Some(template) = temp_template.to_str() {
-        element.set_property("temp-template", template);
-    }
 }
 
 fn http_content_total(headers: &gst::StructureRef) -> Option<u64> {
