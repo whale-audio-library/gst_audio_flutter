@@ -401,6 +401,28 @@ jobs:
           echo "::endgroup::"
 
           if [[ "$test_status" -eq 0 ]]; then
+            xcrun simctl boot "$simulator_id" || true
+            xcrun simctl bootstatus "$simulator_id" -b
+            xcrun simctl list devices "$simulator_id" || true
+            open -a Simulator || true
+            for _ in {1..30}; do
+              if flutter devices | tee "$log_dir/flutter-devices-after-patrol.txt" | grep -q "$simulator_id"; then
+                break
+              fi
+              sleep 2
+            done
+            simulator_name="$(
+              sed -n 's/^[[:space:]]*\(.*\) (mobile) • '"$simulator_id"' • ios.*/\1/p' \
+                "$log_dir/flutter-devices-after-patrol.txt" \
+                | head -n 1
+            )"
+            if [[ -z "$simulator_name" ]]; then
+              cat "$log_dir/flutter-devices-after-patrol.txt"
+              test_status=1
+            fi
+          fi
+
+          if [[ "$test_status" -eq 0 ]]; then
             run_flutter_test \
               "iOS playback integration tests" \
               integration_test/ios_playback_test.dart \
