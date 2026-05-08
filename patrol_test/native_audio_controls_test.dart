@@ -22,11 +22,17 @@ void main() {
       await _assertAudioSessionConfiguration();
       await $.pumpWidgetAndSettle(const AudioPlayerApp());
 
+      final playlistInputs = Platform.isIOS
+          ? const [
+              'asset:///test-assets/tone.wav',
+              'asset:///test-assets/tone.wav',
+            ]
+          : const [
+              'http://127.0.0.1:8765/generated/long-30s.wav',
+              'http://127.0.0.1:8765/generated/long-30s.wav',
+            ];
       await player.setPlaylist(
-        inputs: const [
-          'http://127.0.0.1:8765/generated/long-30s.wav',
-          'http://127.0.0.1:8765/generated/long-30s.wav',
-        ],
+        inputs: playlistInputs,
         startIndex: 0,
       );
       await audioHandler?.customAction('refresh');
