@@ -8,6 +8,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      debug_tmate:
+        description: Open a tmate SSH session for live debugging
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -211,6 +217,10 @@ jobs:
           name: gst-audio-flutter-ios-unsigned
           path: build/ios/gst-audio-flutter-ios-unsigned.ipa
           if-no-files-found: error
+
+      - name: Setup tmate session
+        if: ${{ github.event.inputs.debug_tmate == 'true' }}
+        uses: mxschmitt/action-tmate@v3
 
       - name: Run iOS simulator integration tests
         timeout-minutes: 60
