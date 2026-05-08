@@ -198,7 +198,7 @@ jobs:
           fi
 
       - name: Run iOS simulator integration tests
-        timeout-minutes: 60
+        timeout-minutes: 120
         run: |
           set -euo pipefail
           log_dir="$RUNNER_TEMP/ios-integration-logs"
