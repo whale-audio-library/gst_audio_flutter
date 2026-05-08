@@ -66,6 +66,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - test-assets/long-30s.wav
     - test-assets/tone.wav
     - test-assets/formats/tone.flac
     - test-assets/formats/tone-vorbis.ogg

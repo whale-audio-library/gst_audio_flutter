@@ -23,10 +23,7 @@ void main() {
       await $.pumpWidgetAndSettle(const AudioPlayerApp());
 
       final playlistInputs = Platform.isIOS
-          ? const [
-              'asset:///test-assets/tone.wav',
-              'asset:///test-assets/tone.wav',
-            ]
+          ? const ['asset:///test-assets/long-30s.wav']
           : const [
               'http://127.0.0.1:8765/generated/long-30s.wav',
               'http://127.0.0.1:8765/generated/long-30s.wav',
@@ -40,6 +37,7 @@ void main() {
       await audioHandler?.customAction('refresh');
 
       var state = await _waitForPlaying(index: 0);
+      final foregroundPositionMs = state.positionMs;
 
       if (Platform.isAndroid) {
         await _assertAndroidMusicActive();
@@ -66,8 +64,14 @@ void main() {
         expect(state.currentIndex, 0);
       } else if (Platform.isIOS) {
         await $.platform.mobile.pressHome();
-        state = await _waitForPlaying(index: 0);
-        expect(state.positionMs, greaterThan(0));
+        state = await _waitForState(
+          description: 'background playback on iOS',
+          predicate: (current) =>
+              current.isPlaying &&
+              current.currentIndex == 0 &&
+              current.positionMs > foregroundPositionMs,
+        );
+        expect(state.positionMs, greaterThan(foregroundPositionMs));
       }
 
       await player.stop();
