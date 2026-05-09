@@ -251,9 +251,6 @@ jobs:
               DEVELOPMENT_TEAM="" \
               PROVISIONING_PROFILE="" \
               PROVISIONING_PROFILE_SPECIFIER="" \
-              ARCHS="${IOS_SIMULATOR_ARCHS}" \
-              ONLY_ACTIVE_ARCH=YES \
-              EXCLUDED_ARCHS=x86_64 \
               GSTREAMER_IOS_LIBRARY_DIR="${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
               LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
               OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox"
@@ -344,9 +341,6 @@ jobs:
           PATH="$PATH:$HOME/.pub-cache/bin" \
           CI=true \
           PATROL_ANALYTICS_ENABLED=false \
-          ARCHS="${IOS_SIMULATOR_ARCHS}" \
-          ONLY_ACTIVE_ARCH=YES \
-          EXCLUDED_ARCHS=x86_64 \
           GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
             patrol --verbose build ios \
               --target patrol_test/native_audio_controls_test.dart \
@@ -376,9 +370,6 @@ jobs:
 
               TEST_RUNNER_PATROL_TEST_PORT=8081 \
               TEST_RUNNER_PATROL_APP_PORT=8082 \
-              ARCHS="${IOS_SIMULATOR_ARCHS}" \
-              ONLY_ACTIVE_ARCH=YES \
-              EXCLUDED_ARCHS=x86_64 \
               xcodebuild test-without-building \
                 -xctestrun "$xctestrun_path" \
                 -only-testing RunnerUITests/RunnerUITests \
