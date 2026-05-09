@@ -231,6 +231,13 @@ jobs:
           flutter-version: 3.41.6
           cache: true
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Cache GStreamer Android SDK
         id: cache-gstreamer-android-patrol
         uses: actions/cache@v5
@@ -266,6 +273,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
+          disable-linux-hw-accel: false
           script: |
             python3 tool/audio_test_server.py --port 8765 --directory test-assets &
             server_pid="$!"
