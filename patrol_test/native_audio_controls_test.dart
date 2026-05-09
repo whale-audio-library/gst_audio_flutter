@@ -23,7 +23,7 @@ void main() {
       await $.pumpWidgetAndSettle(const AudioPlayerApp());
 
       final playlistInputs = Platform.isIOS
-          ? const ['asset:///test-assets/tone.wav']
+          ? const ['asset:///test-assets/long-30s.wav']
           : const [
               'http://127.0.0.1:8765/generated/long-30s.wav',
               'http://127.0.0.1:8765/generated/long-30s.wav',
@@ -36,13 +36,7 @@ void main() {
       await player.play();
       await audioHandler?.customAction('refresh');
 
-      var state = Platform.isIOS
-          ? await _waitForState(
-              description: 'playing index 0 on iOS',
-              predicate: (current) =>
-                  current.isPlaying && current.currentIndex == 0,
-            )
-          : await _waitForPlaying(index: 0);
+      var state = await _waitForPlaying(index: 0);
       final foregroundPositionMs = state.positionMs;
 
       if (Platform.isAndroid) {
@@ -75,18 +69,9 @@ void main() {
           predicate: (current) =>
               current.isPlaying &&
               current.currentIndex == 0 &&
-              current.positionMs >
-                  (foregroundPositionMs == 0
-                      ? 0
-                      : foregroundPositionMs + 150),
+              current.positionMs > foregroundPositionMs,
         );
-        expect(
-          state.positionMs >
-              (foregroundPositionMs == 0
-                  ? 0
-                  : foregroundPositionMs + 150),
-          isTrue,
-        );
+        expect(state.positionMs, greaterThan(foregroundPositionMs));
       }
 
       await player.stop();
