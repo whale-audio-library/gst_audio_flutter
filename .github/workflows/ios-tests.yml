@@ -296,9 +296,6 @@ jobs:
             echo "Started ${label} at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
             terminate_runner
             set +e
-            ARCHS="${IOS_SIMULATOR_ARCHS}" \
-            ONLY_ACTIVE_ARCH=YES \
-            EXCLUDED_ARCHS=x86_64 \
             GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
               flutter test "$test_file" \
                 -d "$simulator_name" \
