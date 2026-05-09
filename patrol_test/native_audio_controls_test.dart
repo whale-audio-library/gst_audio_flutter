@@ -23,7 +23,14 @@ void main() {
       await $.pumpWidgetAndSettle(const AudioPlayerApp());
 
       final playlistInputs = Platform.isIOS
-          ? const ['asset:///test-assets/long-30s.wav']
+          ? const [
+              'asset:///test-assets/tone.wav',
+              'asset:///test-assets/tone.wav',
+              'asset:///test-assets/tone.wav',
+              'asset:///test-assets/tone.wav',
+              'asset:///test-assets/tone.wav',
+              'asset:///test-assets/tone.wav',
+            ]
           : const [
               'http://127.0.0.1:8765/generated/long-30s.wav',
               'http://127.0.0.1:8765/generated/long-30s.wav',
@@ -68,10 +75,13 @@ void main() {
           description: 'background playback on iOS',
           predicate: (current) =>
               current.isPlaying &&
-              current.currentIndex == 0 &&
-              current.positionMs > foregroundPositionMs,
+              (current.currentIndex > 0 ||
+                  current.positionMs > foregroundPositionMs),
         );
-        expect(state.positionMs, greaterThan(foregroundPositionMs));
+        expect(
+          state.currentIndex > 0 || state.positionMs > foregroundPositionMs,
+          isTrue,
+        );
       }
 
       await player.stop();
