@@ -127,12 +127,17 @@ jobs:
           xcrun simctl shutdown all || true
           xcrun simctl delete unavailable || true
 
-          simulator_name="CI Debug iPhone 16 Pro"
+          eval "$(python3 tool/resolve_ios_simulator.py --format shell)"
+          simulator_name="Debug ${SIMULATOR_NAME}"
+          simulator_device_name="$SIMULATOR_DEVICE_NAME"
+          simulator_device_type="$SIMULATOR_DEVICE_TYPE"
+          simulator_runtime="$SIMULATOR_RUNTIME"
+          simulator_runtime_name="$SIMULATOR_RUNTIME_NAME"
           simulator_id="$(
             xcrun simctl create \
               "$simulator_name" \
-              com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro \
-              com.apple.CoreSimulator.SimRuntime.iOS-18-5
+              "$simulator_device_type" \
+              "$simulator_runtime"
           )"
 
           {
@@ -143,6 +148,10 @@ jobs:
 
           echo "$simulator_id" > "$log_dir/simulator-id.txt"
           echo "$simulator_name" > "$log_dir/simulator-name.txt"
+          echo "$simulator_device_name" > "$log_dir/simulator-device-name.txt"
+          echo "$simulator_device_type" > "$log_dir/simulator-device-type.txt"
+          echo "$simulator_runtime_name" > "$log_dir/simulator-runtime-name.txt"
+          echo "$simulator_runtime" > "$log_dir/simulator-runtime.txt"
 
           xcrun simctl boot "$simulator_id"
           xcrun simctl bootstatus "$simulator_id" -b
