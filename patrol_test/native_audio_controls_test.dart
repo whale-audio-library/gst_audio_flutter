@@ -23,14 +23,7 @@ void main() {
       await $.pumpWidgetAndSettle(const AudioPlayerApp());
 
       final playlistInputs = Platform.isIOS
-          ? const [
-              'asset:///test-assets/tone.wav',
-              'asset:///test-assets/tone.wav',
-              'asset:///test-assets/tone.wav',
-              'asset:///test-assets/tone.wav',
-              'asset:///test-assets/tone.wav',
-              'asset:///test-assets/tone.wav',
-            ]
+          ? const ['asset:///test-assets/tone.wav']
           : const [
               'http://127.0.0.1:8765/generated/long-30s.wav',
               'http://127.0.0.1:8765/generated/long-30s.wav',
@@ -43,7 +36,13 @@ void main() {
       await player.play();
       await audioHandler?.customAction('refresh');
 
-      var state = await _waitForPlaying(index: 0);
+      var state = Platform.isIOS
+          ? await _waitForState(
+              description: 'playing index 0 on iOS',
+              predicate: (current) =>
+                  current.isPlaying && current.currentIndex == 0,
+            )
+          : await _waitForPlaying(index: 0);
       final foregroundPositionMs = state.positionMs;
 
       if (Platform.isAndroid) {
@@ -75,11 +74,17 @@ void main() {
           description: 'background playback on iOS',
           predicate: (current) =>
               current.isPlaying &&
-              (current.currentIndex > 0 ||
-                  current.positionMs > foregroundPositionMs),
+              current.currentIndex == 0 &&
+              current.positionMs >
+                  (foregroundPositionMs == 0
+                      ? 0
+                      : foregroundPositionMs + 150),
         );
         expect(
-          state.currentIndex > 0 || state.positionMs > foregroundPositionMs,
+          state.positionMs >
+              (foregroundPositionMs == 0
+                  ? 0
+                  : foregroundPositionMs + 150),
           isTrue,
         );
       }
