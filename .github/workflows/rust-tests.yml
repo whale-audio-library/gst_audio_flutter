@@ -1,4 +1,4 @@
-name: iOS Package
+name: Rust Tests
 
 on:
   push:
@@ -17,11 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
-    uses: ./.github/workflows/_ios-workflow.yml
+  rust-tests:
+    uses: ./.github/workflows/_linux-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: rust_tests
     secrets: inherit

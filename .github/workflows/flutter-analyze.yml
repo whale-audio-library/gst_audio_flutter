@@ -1,4 +1,4 @@
-name: iOS Package
+name: Flutter Analyze
 
 on:
   push:
@@ -17,11 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
-    uses: ./.github/workflows/_ios-workflow.yml
+  flutter-analyze:
+    uses: ./.github/workflows/_linux-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: flutter_analyze
     secrets: inherit

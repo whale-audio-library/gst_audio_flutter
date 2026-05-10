@@ -1,4 +1,4 @@
-name: iOS Package
+name: Linux Audio Visualization Test
 
 on:
   push:
@@ -17,11 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
-    uses: ./.github/workflows/_ios-workflow.yml
+  linux-audio-visualization-test:
+    uses: ./.github/workflows/_linux-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: linux_audio_visualization
     secrets: inherit

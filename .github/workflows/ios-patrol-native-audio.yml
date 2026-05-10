@@ -1,4 +1,4 @@
-name: iOS Package
+name: iOS Patrol Native Audio Test
 
 on:
   push:
@@ -17,11 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
+  ios-patrol-native-audio:
     uses: ./.github/workflows/_ios-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: patrol_native_audio
+      artifact_name: ios-patrol-native-audio-logs
     secrets: inherit

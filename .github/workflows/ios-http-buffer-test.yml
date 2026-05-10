@@ -1,4 +1,4 @@
-name: iOS Package
+name: iOS HTTP Buffer Test
 
 on:
   push:
@@ -17,11 +17,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
+  ios-http-buffer-test:
     uses: ./.github/workflows/_ios-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: flutter_test
+      test_file: integration_test/http_buffer_progress_test.dart
+      artifact_name: ios-http-buffer-test-logs
     secrets: inherit

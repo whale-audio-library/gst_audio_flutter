@@ -1,0 +1,131 @@
+name: SSH Debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which runner environment to open
+        required: true
+        default: ubuntu
+        type: choice
+        options:
+          - ubuntu
+          - ios
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ubuntu-ssh:
+    if: ${{ github.event.inputs.target == 'ubuntu' }}
+    name: Ubuntu SSH session
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      GSTREAMER_VERSION: 1.28.2
+      GSTREAMER_SHA256: ba9f1c6e10f0736fbf48cd741634fa90e49d50c961a4454230040b2517490d2a
+      GSTREAMER_ROOT_ANDROID: ${{ github.workspace }}/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Ubuntu debug dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang \
+            lld \
+            pkg-config \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            xz-utils \
+            xvfb
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.6
+          cache: true
+
+      - name: Cache GStreamer Android SDK
+        id: cache-gstreamer-android
+        uses: actions/cache@v5
+        with:
+          path: .cache/gstreamer-android/gstreamer-1.0-android-universal-${{ env.GSTREAMER_VERSION }}
+          key: gstreamer-android-${{ env.GSTREAMER_VERSION }}-${{ env.GSTREAMER_SHA256 }}
+
+      - name: Download GStreamer Android SDK
+        if: ${{ steps.cache-gstreamer-android.outputs.cache-hit != 'true' }}
+        run: bash .github/scripts/install_gstreamer_android.sh
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Open SSH session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true
+
+  ios-ssh:
+    if: ${{ github.event.inputs.target == 'ios' }}
+    name: iOS SSH session
+    runs-on: macos-latest
+    timeout-minutes: 120
+
+    env:
+      GSTREAMER_IOS_VERSION: 1.28.2
+      GSTREAMER_IOS_XCFRAMEWORK_SHA256: c2e538da4430c73ac0fdf20db635dc342142cd401cf9e9b00b94dcbb9ccba542
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.6
+          cache: true
+
+      - name: Cache GStreamer iOS SDK
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/gstreamer-ios
+          key: gstreamer-ios-xcframework-v2-${{ env.GSTREAMER_IOS_VERSION }}-${{ env.GSTREAMER_IOS_XCFRAMEWORK_SHA256 }}
+
+      - name: Install GStreamer iOS SDK
+        run: bash .github/scripts/install_gstreamer_ios.sh
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Open SSH session
+        uses: mxschmitt/action-tmate@v3
+        with:
+          limit-access-to-actor: true

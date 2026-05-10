@@ -1,4 +1,4 @@
-name: iOS Package
+name: Android APK Build
 
 on:
   push:
@@ -17,11 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
-    uses: ./.github/workflows/_ios-workflow.yml
+  android-apk:
+    uses: ./.github/workflows/_android-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: apk
     secrets: inherit

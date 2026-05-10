@@ -1,4 +1,4 @@
-name: iOS Package
+name: iOS Runner Tests
 
 on:
   push:
@@ -17,11 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ios-package:
+  ios-runner-tests:
     uses: ./.github/workflows/_ios-workflow.yml
     permissions:
       contents: read
     with:
-      task: package
-      artifact_name: gst-audio-flutter-ios-unsigned
+      task: runner_tests
+      artifact_name: ios-runner-tests-logs
     secrets: inherit
