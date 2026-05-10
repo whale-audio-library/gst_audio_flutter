@@ -51,6 +51,8 @@ jobs:
             libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good \
+            openssh-client \
+            tmate \
             xz-utils \
             xvfb
 
@@ -84,23 +86,21 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Open SSH session
-        id: tmate
-        uses: mxschmitt/action-tmate@v3
-        with:
-          detached: true
-          limit-access-to-actor: true
-
-      - name: Print SSH connection details
+      - name: Start SSH session
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/tmate"
-          echo "SSH: ${{ steps.tmate.outputs['ssh-command'] }}"
-          echo "WEB: ${{ steps.tmate.outputs['web-url'] }}"
+          socket="$RUNNER_TEMP/tmate/runner.sock"
+          tmate -S "$socket" new-session -d
+          tmate -S "$socket" wait tmate-ready
+          ssh_command="$(tmate -S "$socket" display -p '#{tmate_ssh}')"
+          web_url="$(tmate -S "$socket" display -p '#{tmate_web}')"
           {
-            echo "SSH=${{ steps.tmate.outputs['ssh-command'] }}"
-            echo "WEB=${{ steps.tmate.outputs['web-url'] }}"
+            echo "SSH=${ssh_command}"
+            echo "WEB=${web_url}"
           } > "$RUNNER_TEMP/tmate/connection.txt"
           cat "$RUNNER_TEMP/tmate/connection.txt"
+          echo "TMATE_SOCKET=$socket" >> "$GITHUB_ENV"
 
       - name: Upload SSH connection details
         uses: actions/upload-artifact@v7
@@ -110,7 +110,10 @@ jobs:
 
       - name: Keep SSH session alive
         run: |
-          sleep 7200
+          set -euo pipefail
+          while tmate -S "$TMATE_SOCKET" has-session 2>/dev/null; do
+            sleep 30
+          done
 
   ios-ssh:
     if: ${{ github.event.inputs.target == 'ios' }}
@@ -136,6 +139,10 @@ jobs:
           flutter-version: 3.41.6
           cache: true
 
+      - name: Install macOS debug dependencies
+        run: |
+          brew install tmate
+
       - name: Cache GStreamer iOS SDK
         uses: actions/cache@v5
         with:
@@ -148,23 +155,21 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Open SSH session
-        id: tmate
-        uses: mxschmitt/action-tmate@v3
-        with:
-          detached: true
-          limit-access-to-actor: true
-
-      - name: Print SSH connection details
+      - name: Start SSH session
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/tmate"
-          echo "SSH: ${{ steps.tmate.outputs['ssh-command'] }}"
-          echo "WEB: ${{ steps.tmate.outputs['web-url'] }}"
+          socket="$RUNNER_TEMP/tmate/runner.sock"
+          tmate -S "$socket" new-session -d
+          tmate -S "$socket" wait tmate-ready
+          ssh_command="$(tmate -S "$socket" display -p '#{tmate_ssh}')"
+          web_url="$(tmate -S "$socket" display -p '#{tmate_web}')"
           {
-            echo "SSH=${{ steps.tmate.outputs['ssh-command'] }}"
-            echo "WEB=${{ steps.tmate.outputs['web-url'] }}"
+            echo "SSH=${ssh_command}"
+            echo "WEB=${web_url}"
           } > "$RUNNER_TEMP/tmate/connection.txt"
           cat "$RUNNER_TEMP/tmate/connection.txt"
+          echo "TMATE_SOCKET=$socket" >> "$GITHUB_ENV"
 
       - name: Upload SSH connection details
         uses: actions/upload-artifact@v7
@@ -174,4 +179,7 @@ jobs:
 
       - name: Keep SSH session alive
         run: |
-          sleep 7200
+          set -euo pipefail
+          while tmate -S "$TMATE_SOCKET" has-session 2>/dev/null; do
+            sleep 30
+          done
