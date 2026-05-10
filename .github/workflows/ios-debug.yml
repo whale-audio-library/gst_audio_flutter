@@ -93,8 +93,23 @@ jobs:
 
       - name: Print SSH connection details
         run: |
+          mkdir -p "$RUNNER_TEMP/tmate"
           echo "SSH: ${{ steps.tmate.outputs['ssh-command'] }}"
           echo "WEB: ${{ steps.tmate.outputs['web-url'] }}"
+          {
+            echo "SSH=${{ steps.tmate.outputs['ssh-command'] }}"
+            echo "WEB=${{ steps.tmate.outputs['web-url'] }}"
+          } > "$RUNNER_TEMP/tmate/connection.txt"
+          cat "$RUNNER_TEMP/tmate/connection.txt"
+
+      - name: Upload SSH connection details
+        uses: actions/upload-artifact@v7
+        with:
+          name: ubuntu-ssh-connection
+          path: ${{ runner.temp }}/tmate/connection.txt
+
+      - name: Keep SSH session alive
+        run: |
           sleep 7200
 
   ios-ssh:
@@ -142,6 +157,21 @@ jobs:
 
       - name: Print SSH connection details
         run: |
+          mkdir -p "$RUNNER_TEMP/tmate"
           echo "SSH: ${{ steps.tmate.outputs['ssh-command'] }}"
           echo "WEB: ${{ steps.tmate.outputs['web-url'] }}"
+          {
+            echo "SSH=${{ steps.tmate.outputs['ssh-command'] }}"
+            echo "WEB=${{ steps.tmate.outputs['web-url'] }}"
+          } > "$RUNNER_TEMP/tmate/connection.txt"
+          cat "$RUNNER_TEMP/tmate/connection.txt"
+
+      - name: Upload SSH connection details
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ssh-connection
+          path: ${{ runner.temp }}/tmate/connection.txt
+
+      - name: Keep SSH session alive
+        run: |
           sleep 7200
