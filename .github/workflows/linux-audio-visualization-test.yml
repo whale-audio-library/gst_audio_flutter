@@ -1,0 +1,26 @@
+name: Linux Audio Visualization Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-audio-visualization-test:
+    uses: ./.github/workflows/_linux-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: linux_audio_visualization
+    secrets: inherit

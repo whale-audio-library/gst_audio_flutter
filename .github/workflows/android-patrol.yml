@@ -1,0 +1,26 @@
+name: Android Patrol Native Audio Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-patrol:
+    uses: ./.github/workflows/_android-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: patrol
+    secrets: inherit

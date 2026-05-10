@@ -1,0 +1,27 @@
+name: iOS Runner Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-runner-tests:
+    uses: ./.github/workflows/_ios-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: runner_tests
+      artifact_name: ios-runner-tests-logs
+    secrets: inherit

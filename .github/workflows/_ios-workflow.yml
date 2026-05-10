@@ -1,0 +1,350 @@
+name: Reusable iOS Workflow
+
+on:
+  workflow_call:
+    inputs:
+      task:
+        required: true
+        type: string
+      test_file:
+        required: false
+        default: ""
+        type: string
+      artifact_name:
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: macos-latest
+    timeout-minutes: 180
+
+    env:
+      GSTREAMER_IOS_VERSION: 1.28.2
+      GSTREAMER_IOS_XCFRAMEWORK_SHA256: c2e538da4430c73ac0fdf20db635dc342142cd401cf9e9b00b94dcbb9ccba542
+      IOS_SIMULATOR_ARCHS: arm64
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.6
+          cache: true
+
+      - name: Show tool versions
+        run: |
+          flutter --version
+          xcodebuild -version
+          pod --version
+          pkg-config --version
+          rustc --version
+          cargo --version
+
+      - name: Cache GStreamer iOS SDK
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/gstreamer-ios
+          key: gstreamer-ios-xcframework-v2-${{ env.GSTREAMER_IOS_VERSION }}-${{ env.GSTREAMER_IOS_XCFRAMEWORK_SHA256 }}
+
+      - name: Install GStreamer iOS SDK
+        run: bash .github/scripts/install_gstreamer_ios.sh
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Install Patrol CLI
+        if: ${{ inputs.task == 'patrol_native_audio' }}
+        run: dart pub global activate patrol_cli 4.3.1
+
+      - name: Generate iOS build configuration
+        run: flutter build ios --release --config-only --no-codesign
+
+      - name: Prepare iOS simulator and log directory
+        if: ${{ inputs.task != 'package' }}
+        run: |
+          set -euo pipefail
+          log_dir="$RUNNER_TEMP/${{ inputs.artifact_name }}"
+          mkdir -p "$log_dir"
+
+          xcrun simctl shutdown all || true
+          xcrun simctl delete unavailable || true
+
+          eval "$(python3 tool/resolve_ios_simulator.py --format shell)"
+          simulator_name="$SIMULATOR_NAME"
+          simulator_device_name="$SIMULATOR_DEVICE_NAME"
+          simulator_device_type="$SIMULATOR_DEVICE_TYPE"
+          simulator_runtime="$SIMULATOR_RUNTIME"
+          simulator_runtime_name="$SIMULATOR_RUNTIME_NAME"
+          simulator_id="$(
+            xcrun simctl create \
+              "$simulator_name" \
+              "$simulator_device_type" \
+              "$simulator_runtime"
+          )"
+          if [[ -z "$simulator_id" ]]; then
+            echo "Failed to create iOS simulator"
+            exit 1
+          fi
+
+          {
+            echo "IOS_LOG_DIR=$log_dir"
+            echo "IOS_SIMULATOR_ID=$simulator_id"
+            echo "IOS_SIMULATOR_NAME=$simulator_name"
+          } >> "$GITHUB_ENV"
+
+          echo "$simulator_id" > "$log_dir/simulator-id.txt"
+          echo "$simulator_name" > "$log_dir/simulator-name.txt"
+          echo "$simulator_device_name" > "$log_dir/simulator-device-name.txt"
+          echo "$simulator_device_type" > "$log_dir/simulator-device-type.txt"
+          echo "$simulator_runtime_name" > "$log_dir/simulator-runtime-name.txt"
+          echo "$simulator_runtime" > "$log_dir/simulator-runtime.txt"
+
+          xcrun simctl erase "$simulator_id"
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
+          open -a Simulator || true
+
+          for _ in {1..30}; do
+            if flutter devices | tee "$log_dir/flutter-devices.txt" | grep -q "$simulator_id"; then
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Build iOS without codesign
+        if: ${{ inputs.task == 'package' }}
+        run: |
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            GSTREAMER_IOS_LIBRARY_DIR="${GSTREAMER_IOS_DEVICE_LIBRARY_DIR}" \
+            LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_DEVICE_LIBRARY_DIR}" \
+            OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_DEVICE_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox" \
+            build
+
+      - name: Package unsigned IPA
+        if: ${{ inputs.task == 'package' }}
+        run: |
+          set -euo pipefail
+
+          artifact_root="$GITHUB_WORKSPACE/build/ios/unsigned-ipa"
+          payload_dir="$artifact_root/Payload"
+          ipa_path="$GITHUB_WORKSPACE/build/ios/gst-audio-flutter-ios-unsigned.ipa"
+
+          rm -rf "$artifact_root" "$ipa_path"
+          mkdir -p "$payload_dir"
+
+          app_path="$(
+            find "$GITHUB_WORKSPACE/build" "$HOME/Library/Developer/Xcode/DerivedData" \
+              -type d -path '*/Release-iphoneos/Runner.app' -print -quit 2>/dev/null || true
+          )"
+
+          if [[ -z "$app_path" ]]; then
+            echo "Runner.app was not found"
+            find "$GITHUB_WORKSPACE/build" "$HOME/Library/Developer/Xcode/DerivedData" \
+              -type d -name 'Runner.app' -print 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "Packaging unsigned app at $app_path"
+          cp -R "$app_path" "$payload_dir/Runner.app"
+          (cd "$artifact_root" && /usr/bin/zip -qry "$ipa_path" Payload)
+          ls -lh "$ipa_path"
+
+      - name: Upload unsigned IPA
+        if: ${{ inputs.task == 'package' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: build/ios/gst-audio-flutter-ios-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Run iOS Runner tests
+        if: ${{ inputs.task == 'runner_tests' }}
+        timeout-minutes: 60
+        run: |
+          set -euo pipefail
+          GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+            xcodebuild test \
+              -workspace ios/Runner.xcworkspace \
+              -scheme Runner \
+              -configuration Debug \
+              -destination "id=${IOS_SIMULATOR_ID}" \
+              -only-testing:RunnerTests \
+              CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGN_STYLE=Manual \
+              DEVELOPMENT_TEAM="" \
+              PROVISIONING_PROFILE="" \
+              PROVISIONING_PROFILE_SPECIFIER="" \
+              GSTREAMER_IOS_LIBRARY_DIR="${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
+              LIBRARY_SEARCH_PATHS="\$(inherited) ${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR}" \
+              OTHER_LDFLAGS="\$(inherited) -L${GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR} -lGStreamer -lresolv -liconv -lsqlite3 -lc++ -framework AVFoundation -framework AssetsLibrary -framework AudioToolbox -framework CoreAudio -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework Foundation -framework VideoToolbox" \
+              > >(tee "$IOS_LOG_DIR/runner-tests.log") 2>&1
+
+      - name: Run iOS Patrol native audio test
+        if: ${{ inputs.task == 'patrol_native_audio' }}
+        timeout-minutes: 120
+        run: |
+          set -euo pipefail
+
+          PATH="$PATH:$HOME/.pub-cache/bin" \
+          CI=true \
+          PATROL_ANALYTICS_ENABLED=false \
+          GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+            patrol --verbose build ios \
+              --target patrol_test/native_audio_controls_test.dart \
+              --simulator \
+              --no-label \
+              > >(tee "$IOS_LOG_DIR/patrol-native-audio.log") 2>&1
+
+          xctestrun_path="$(
+            find "$GITHUB_WORKSPACE/build/ios_integ/Build/Products" \
+              -type f \
+              -name 'Runner_iphonesimulator*.xctestrun' \
+              -print -quit
+          )"
+          if [[ -z "$xctestrun_path" ]]; then
+            echo "Patrol iOS xctestrun file was not found" | tee -a "$IOS_LOG_DIR/patrol-native-audio.log"
+            exit 1
+          fi
+
+          xcrun simctl uninstall "$IOS_SIMULATOR_ID" com.example.gstAudioFlutter >/dev/null 2>&1 || true
+          xcrun simctl uninstall "$IOS_SIMULATOR_ID" com.example.gstAudioFlutter.RunnerUITests.xctrunner >/dev/null 2>&1 || true
+
+          TEST_RUNNER_PATROL_TEST_PORT=8081 \
+          TEST_RUNNER_PATROL_APP_PORT=8082 \
+          xcodebuild test-without-building \
+            -xctestrun "$xctestrun_path" \
+            -only-testing RunnerUITests/RunnerUITests \
+            -destination "id=${IOS_SIMULATOR_ID}" \
+            -destination-timeout 1 \
+            -resultBundlePath "$GITHUB_WORKSPACE/build/ios_results_patrol_native_audio.xcresult" \
+            > >(tee -a "$IOS_LOG_DIR/patrol-native-audio.log") 2>&1
+
+      - name: Run iOS Flutter integration test
+        if: ${{ inputs.task == 'flutter_test' }}
+        timeout-minutes: 120
+        run: |
+          set -euo pipefail
+          python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+          python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+          server_pid="$!"
+          echo "$server_pid" > "$IOS_LOG_DIR/audio-server.pid"
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for _ in {1..20}; do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:8765/generated/long-30s.wav; then
+              break
+            fi
+            sleep 1
+          done
+          if ! curl --fail --silent --output /dev/null http://127.0.0.1:8765/generated/long-30s.wav; then
+            echo "Audio test server did not become ready"
+            exit 1
+          fi
+
+          terminate_runner() {
+            xcrun simctl terminate "$IOS_SIMULATOR_ID" com.example.gstAudioFlutter >/dev/null 2>&1 || true
+          }
+
+          timeout_seconds=1800
+          elapsed=0
+          status=0
+
+          terminate_runner
+          set +e
+          GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
+            flutter test "${{ inputs.test_file }}" \
+              -d "$IOS_SIMULATOR_NAME" \
+              --reporter expanded \
+              > >(tee "$IOS_LOG_DIR/flutter-test.log") 2>&1 &
+          flutter_pid="$!"
+
+          while kill -0 "$flutter_pid" 2>/dev/null; do
+            if [[ "$elapsed" -ge "$timeout_seconds" ]]; then
+              echo "Timed out after ${timeout_seconds} seconds" | tee -a "$IOS_LOG_DIR/flutter-test.log"
+              terminate_runner
+              pkill -TERM -P "$flutter_pid" >/dev/null 2>&1 || true
+              kill -TERM "$flutter_pid" >/dev/null 2>&1 || true
+              sleep 5
+              pkill -KILL -P "$flutter_pid" >/dev/null 2>&1 || true
+              kill -KILL "$flutter_pid" >/dev/null 2>&1 || true
+              status=124
+              break
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+
+          if [[ "$status" -eq 0 ]]; then
+            wait "$flutter_pid"
+            status="$?"
+          else
+            wait "$flutter_pid" >/dev/null 2>&1 || true
+          fi
+          set -e
+          terminate_runner
+          exit "$status"
+
+      - name: Collect iOS logs
+        if: ${{ always() && inputs.task != 'package' }}
+        run: |
+          set +e
+          if [[ -n "${IOS_SIMULATOR_ID:-}" && -d "${IOS_LOG_DIR:-}" ]]; then
+            xcrun simctl spawn "$IOS_SIMULATOR_ID" log show \
+              --style syslog \
+              --last 10m \
+              --predicate 'process == "Runner" OR eventMessage CONTAINS[c] "GStreamer" OR eventMessage CONTAINS[c] "flutter" OR eventMessage CONTAINS[c] "gst_audio"' \
+              > "$IOS_LOG_DIR/simulator.log" 2>&1 || true
+          fi
+
+          find "$HOME/Library/Logs/DiagnosticReports" \
+            -maxdepth 1 \
+            -type f \
+            \( -name 'Runner*.crash' -o -name 'Runner*.ips' \) \
+            -print \
+            -exec cp {} "$IOS_LOG_DIR/" \; 2>/dev/null || true
+
+          find build \
+            -maxdepth 1 \
+            -type d \
+            -name 'ios_results*.xcresult' \
+            -print \
+            -exec cp -R {} "$IOS_LOG_DIR/" \; 2>/dev/null || true
+
+      - name: Cleanup iOS simulator
+        if: ${{ always() && inputs.task != 'package' }}
+        run: |
+          set +e
+          if [[ -f "${IOS_LOG_DIR:-}/audio-server.pid" ]]; then
+            kill "$(cat "$IOS_LOG_DIR/audio-server.pid")" 2>/dev/null || true
+          fi
+          if [[ -n "${IOS_SIMULATOR_ID:-}" ]]; then
+            xcrun simctl delete "$IOS_SIMULATOR_ID" >/dev/null 2>&1 || true
+          fi
+
+      - name: Upload iOS logs
+        if: ${{ always() && inputs.task != 'package' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ env.IOS_LOG_DIR }}
+          if-no-files-found: warn

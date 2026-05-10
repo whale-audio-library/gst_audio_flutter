@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:gst_audio_flutter/main.dart';
 import 'package:gst_audio_flutter/src/rust/frb_generated.dart';
 import 'package:integration_test/integration_test.dart';
@@ -11,5 +12,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('GStreamer Audio'), findsWidgets);
     expect(find.text('Queue'), findsOneWidget);
+    expect(find.byKey(const ValueKey('audio-visualization')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('visualization-combined-canvas')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('visualization-rms')), findsOneWidget);
+    expect(find.byKey(const ValueKey('visualization-peak')), findsOneWidget);
+    expect(find.byKey(const ValueKey('visualization-beat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('visualization-pcm')), findsOneWidget);
   });
 }

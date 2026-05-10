@@ -1,0 +1,27 @@
+name: iOS Patrol Native Audio Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-patrol-native-audio:
+    uses: ./.github/workflows/_ios-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: patrol_native_audio
+      artifact_name: ios-patrol-native-audio-logs
+    secrets: inherit

@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `apply_speed_after_seek`, `apply_volume`, `build_audio_sink`, `checked_index`, `clamp_speed`, `compute_next_index`, `configure_platform_gstreamer_runtime`, `create_device_sink`, `current_duration_ms`, `current_position_ms`, `current_track`, `device_id`, `ensure_runtime_started`, `ensure_runtime`, `fade_to`, `flutter_asset_to_uri`, `handle_command`, `input_to_uri`, `is_http_uri`, `join`, `list_output_devices`, `load_current`, `looks_like_uri`, `new`, `next_track`, `pause_playback`, `poll_bus`, `previous_track`, `recv_reply`, `refresh_output_devices`, `register_static_plugins`, `reset_buffering_for_uri`, `run_player_thread`, `runtime_slot`, `seek`, `send`, `set_output_device`, `set_speed`, `snapshot`, `start_playback`, `start`, `stop_fade`, `stop_pipeline`, `tick_fade`, `title_from_input`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Command`, `FadeState`, `GStreamerPlayer`, `PlayerRuntime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `apply_speed_after_seek`, `apply_volume`, `attach_pcm_appsink`, `average_normalized_db`, `build_audio_sink`, `checked_index`, `clamp_speed`, `clear_visualization`, `compute_next_index`, `configure_download_buffer`, `configure_platform_gstreamer_runtime`, `create_device_sink`, `current_buffering_percent`, `current_duration_ms`, `current_position_ms`, `current_track`, `current_transfer_percent`, `detect_beat`, `device_id`, `downsample_pcm`, `enrich_spectrum_frame`, `ensure_runtime_started`, `ensure_runtime`, `fade_to`, `flutter_asset_to_uri`, `from_spectrum_structure`, `from_structure`, `handle_command`, `http_content_total`, `http_header_value`, `input_to_uri`, `install_download_probe_on_source`, `install_download_probe`, `is_http_source_element`, `is_http_uri`, `join`, `link_tee_branch`, `list_output_devices`, `load_current`, `looks_like_uri`, `new`, `next_track`, `normalize_db`, `numeric_value`, `numeric_values`, `parse_content_range_total`, `pause_playback`, `pcm_from_sample`, `poll_bus`, `previous_track`, `push_limited`, `recv_reply`, `refresh_output_devices`, `refresh_pcm_visualization`, `register_static_plugins`, `reset_buffering_for_uri`, `reset_download_tracking`, `run_player_thread`, `runtime_slot`, `seek`, `send`, `set_output_device`, `set_speed`, `silent`, `smooth_values`, `snapshot`, `start_playback`, `start`, `stop_fade`, `stop_pipeline`, `tick_fade`, `title_from_input`, `update_http_download_total`, `update_level_visualization`, `update_visualization`, `visualization_snapshot`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Command`, `FadeState`, `GStreamerPlayer`, `LevelFrame`, `PlayerRuntime`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<void> shutdownPlayer() =>
     RustLib.instance.api.crateApiPlayerShutdownPlayer();
@@ -70,6 +70,9 @@ Future<List<AudioOutputDevice>> listOutputDevices() =>
 
 Future<PlaybackState> getState() =>
     RustLib.instance.api.crateApiPlayerGetState();
+
+Future<VisualizationFrame> getVisualizationFrame() =>
+    RustLib.instance.api.crateApiPlayerGetVisualizationFrame();
 
 class AudioOutputDevice {
   final String id;
@@ -200,4 +203,71 @@ class Track {
           runtimeType == other.runtimeType &&
           uri == other.uri &&
           title == other.title;
+}
+
+class VisualizationFrame {
+  final PlatformInt64 timestampMs;
+  final Float64List pcm;
+  final Float64List magnitude;
+  final Float64List rms;
+  final Float64List peak;
+  final Float64List decay;
+  final double rmsNormalized;
+  final double peakNormalized;
+  final bool beat;
+  final double beatStrength;
+  final Float64List waveform;
+  final Float64List normalized;
+  final bool isActive;
+
+  const VisualizationFrame({
+    required this.timestampMs,
+    required this.pcm,
+    required this.magnitude,
+    required this.rms,
+    required this.peak,
+    required this.decay,
+    required this.rmsNormalized,
+    required this.peakNormalized,
+    required this.beat,
+    required this.beatStrength,
+    required this.waveform,
+    required this.normalized,
+    required this.isActive,
+  });
+
+  @override
+  int get hashCode =>
+      timestampMs.hashCode ^
+      pcm.hashCode ^
+      magnitude.hashCode ^
+      rms.hashCode ^
+      peak.hashCode ^
+      decay.hashCode ^
+      rmsNormalized.hashCode ^
+      peakNormalized.hashCode ^
+      beat.hashCode ^
+      beatStrength.hashCode ^
+      waveform.hashCode ^
+      normalized.hashCode ^
+      isActive.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VisualizationFrame &&
+          runtimeType == other.runtimeType &&
+          timestampMs == other.timestampMs &&
+          pcm == other.pcm &&
+          magnitude == other.magnitude &&
+          rms == other.rms &&
+          peak == other.peak &&
+          decay == other.decay &&
+          rmsNormalized == other.rmsNormalized &&
+          peakNormalized == other.peakNormalized &&
+          beat == other.beat &&
+          beatStrength == other.beatStrength &&
+          waveform == other.waveform &&
+          normalized == other.normalized &&
+          isActive == other.isActive;
 }

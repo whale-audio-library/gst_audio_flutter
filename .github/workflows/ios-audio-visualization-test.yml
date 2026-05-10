@@ -1,0 +1,28 @@
+name: iOS Audio Visualization Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-audio-visualization-test:
+    uses: ./.github/workflows/_ios-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: flutter_test
+      test_file: integration_test/audio_visualization_test.dart
+      artifact_name: ios-audio-visualization-test-logs
+    secrets: inherit

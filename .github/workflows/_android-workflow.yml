@@ -1,0 +1,136 @@
+name: Reusable Android Workflow
+
+on:
+  workflow_call:
+    inputs:
+      task:
+        required: true
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      GSTREAMER_VERSION: 1.28.2
+      GSTREAMER_SHA256: ba9f1c6e10f0736fbf48cd741634fa90e49d50c961a4454230040b2517490d2a
+      GSTREAMER_ROOT_ANDROID: ${{ github.workspace }}/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
+      CARGO_BUILD_JOBS: "1"
+      RUST_MIN_STACK: "33554432"
+      PATROL_ANALYTICS_ENABLED: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            xz-utils
+
+      - name: Free runner disk space for APK build
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/local/lib/android/sdk/emulator \
+            /usr/local/lib/android/sdk/system-images
+          docker image prune -af || true
+          df -h
+        if: ${{ inputs.task == 'apk' }}
+
+      - name: Free runner disk space for Patrol test
+        if: ${{ inputs.task == 'patrol' }}
+        run: |
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost
+          docker image prune -af || true
+          df -h
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.41.6
+          cache: true
+
+      - name: Cache GStreamer Android SDK
+        id: cache-gstreamer-android
+        uses: actions/cache@v5
+        with:
+          path: .cache/gstreamer-android/gstreamer-1.0-android-universal-${{ env.GSTREAMER_VERSION }}
+          key: gstreamer-android-${{ env.GSTREAMER_VERSION }}-${{ env.GSTREAMER_SHA256 }}
+
+      - name: Download GStreamer Android SDK
+        if: ${{ steps.cache-gstreamer-android.outputs.cache-hit != 'true' }}
+        run: bash .github/scripts/install_gstreamer_android.sh
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Enable KVM
+        if: ${{ inputs.task == 'patrol' }}
+        run: |
+          if [[ ! -e /dev/kvm ]]; then
+            echo "/dev/kvm is not available on this runner"
+            exit 1
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo chown root:kvm /dev/kvm
+          sudo chmod 0666 /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Install Patrol CLI
+        if: ${{ inputs.task == 'patrol' }}
+        run: dart pub global activate patrol_cli 4.3.1
+
+      - name: Generate integration audio fixtures
+        if: ${{ inputs.task == 'patrol' }}
+        run: python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+
+      - name: Build Android release APK
+        if: ${{ inputs.task == 'apk' }}
+        run: flutter build apk --release --target-platform android-x64
+
+      - name: Upload APK artifact
+        if: ${{ inputs.task == 'apk' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gst-audio-flutter-android-x64-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Run Android Patrol native audio test
+        if: ${{ inputs.task == 'patrol' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-linux-hw-accel: false
+          script: bash tool/run_android_patrol_ci.sh

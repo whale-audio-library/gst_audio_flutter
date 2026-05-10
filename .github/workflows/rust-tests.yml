@@ -1,0 +1,26 @@
+name: Rust Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-tests:
+    uses: ./.github/workflows/_linux-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: rust_tests
+    secrets: inherit

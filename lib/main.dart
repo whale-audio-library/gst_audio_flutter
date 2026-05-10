@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:gst_audio_flutter/src/audio_system_integration.dart';
 import 'package:gst_audio_flutter/src/rust/api/player.dart' as player;
 import 'package:gst_audio_flutter/src/rust/frb_generated.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await RustLib.init();
+  await initializeAudioSystem();
   runApp(const AudioPlayerApp());
 }
 
@@ -47,10 +50,13 @@ class _PlayerPageState extends State<PlayerPage> {
   final _queueFocus = FocusNode();
 
   player.PlaybackState? _state;
+  player.VisualizationFrame? _visualizationFrame;
   List<player.AudioOutputDevice> _devices = const [];
   Timer? _pollTimer;
+  Timer? _visualizationPollTimer;
   bool _busy = false;
   bool _draggingSeek = false;
+  bool _refreshingVisualization = false;
   double _seekMs = 0;
   String _error = '';
 
@@ -63,11 +69,24 @@ class _PlayerPageState extends State<PlayerPage> {
         _refreshState();
       }
     });
+    _visualizationPollTimer = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) {
+        final shouldPoll =
+            _state?.isPlaying == true ||
+            _state?.isBuffering == true ||
+            _visualizationFrame?.isActive == true;
+        if (shouldPoll) {
+          _refreshVisualizationFrame();
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _visualizationPollTimer?.cancel();
     _queueController.dispose();
     _newItemController.dispose();
     _manualSeekController.dispose();
@@ -125,6 +144,20 @@ class _PlayerPageState extends State<PlayerPage> {
       if (mounted) {
         setState(() => _error = error.toString());
       }
+    }
+  }
+
+  Future<void> _refreshVisualizationFrame() async {
+    if (_refreshingVisualization) return;
+    _refreshingVisualization = true;
+    try {
+      final nextFrame = await player.getVisualizationFrame();
+      if (!mounted) return;
+      setState(() => _visualizationFrame = nextFrame);
+    } catch (_) {
+      // Playback state owns user-visible errors; visualization should fail soft.
+    } finally {
+      _refreshingVisualization = false;
     }
   }
 
@@ -205,6 +238,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
             final controlPane = _ControlPane(
               state: state,
+              visualizationFrame: _visualizationFrame,
               devices: _devices,
               busy: _busy,
               error: _error.isNotEmpty ? _error : state?.lastError ?? '',
@@ -251,7 +285,7 @@ class _PlayerPageState extends State<PlayerPage> {
                 children: [
                   SizedBox(width: 360, child: queuePane),
                   VerticalDivider(width: 1, color: color.outlineVariant),
-                  Expanded(child: controlPane),
+                  Expanded(child: SingleChildScrollView(child: controlPane)),
                 ],
               );
             }
@@ -400,6 +434,7 @@ class _QueuePane extends StatelessWidget {
 class _ControlPane extends StatelessWidget {
   const _ControlPane({
     required this.state,
+    required this.visualizationFrame,
     required this.devices,
     required this.busy,
     required this.error,
@@ -426,6 +461,7 @@ class _ControlPane extends StatelessWidget {
   });
 
   final player.PlaybackState? state;
+  final player.VisualizationFrame? visualizationFrame;
   final List<player.AudioOutputDevice> devices;
   final bool busy;
   final String error;
@@ -513,7 +549,9 @@ class _ControlPane extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
+          _AudioVisualization(frame: visualizationFrame),
+          const SizedBox(height: 14),
           Slider(
             value: positionMs,
             max: durationMs > 0 ? durationMs : 1,
@@ -566,6 +604,7 @@ class _ControlPane extends StatelessWidget {
                 icon: const Icon(Icons.skip_previous),
               ),
               IconButton.filled(
+                key: const ValueKey('play-pause-button'),
                 tooltip: state?.isPlaying == true ? 'Pause' : 'Play',
                 iconSize: 34,
                 onPressed: onPlayPause,
@@ -767,6 +806,272 @@ class _HttpBufferProgress extends StatelessWidget {
       ),
     );
   }
+}
+
+class _AudioVisualization extends StatelessWidget {
+  const _AudioVisualization({required this.frame});
+
+  final player.VisualizationFrame? frame;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme;
+    final active = frame?.isActive == true;
+    final rms = _metricValue(frame?.rmsNormalized);
+    final peak = _metricValue(frame?.peakNormalized);
+    final beat = _metricValue(frame?.beatStrength);
+    final pcmReady = active && (frame?.pcm.isNotEmpty ?? false);
+
+    return Semantics(
+      label: 'Audio visualization',
+      value: active ? 'Active' : 'Idle',
+      child: DecoratedBox(
+        key: const ValueKey('audio-visualization'),
+        decoration: BoxDecoration(
+          color: color.surfaceContainerHighest,
+          border: Border.all(color: color.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            children: [
+              SizedBox(
+                key: const ValueKey('visualization-combined-canvas'),
+                height: 112,
+                child: CustomPaint(
+                  painter: _AudioVisualizationPainter(
+                    frame: frame,
+                    colorScheme: color,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _VisualizationMeter(
+                      key: const ValueKey('visualization-rms'),
+                      label: 'RMS',
+                      value: rms,
+                      color: color.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _VisualizationMeter(
+                      key: const ValueKey('visualization-peak'),
+                      label: 'Peak',
+                      value: peak,
+                      color: color.tertiary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _VisualizationMeter(
+                      key: const ValueKey('visualization-beat'),
+                      label: 'Beat',
+                      value: beat,
+                      color: frame?.beat == true
+                          ? color.error
+                          : color.secondary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _VisualizationMeter(
+                      key: const ValueKey('visualization-pcm'),
+                      label: 'PCM',
+                      value: pcmReady ? 1.0 : 0.0,
+                      color: color.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VisualizationMeter extends StatelessWidget {
+  const _VisualizationMeter({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final double value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final normalized = value.clamp(0.0, 1.0).toDouble();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: normalized,
+              minHeight: 4,
+              color: color,
+              backgroundColor: colorScheme.surface.withValues(alpha: 0.75),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+class _AudioVisualizationPainter extends CustomPainter {
+  const _AudioVisualizationPainter({
+    required this.frame,
+    required this.colorScheme,
+  });
+
+  static const int _fallbackBandCount = 48;
+
+  final player.VisualizationFrame? frame;
+  final ColorScheme colorScheme;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final backgroundPaint = Paint()
+      ..color = colorScheme.surfaceContainerHighest
+      ..style = PaintingStyle.fill;
+    final borderPaint = Paint()
+      ..color = colorScheme.outlineVariant
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final rect = Offset.zero & size;
+    canvas.drawRect(rect, backgroundPaint);
+
+    final spectrumValues = _spectrumValues(frame);
+    final waveformValues = _waveformValues(frame);
+    final centerY = size.height * 0.5;
+    final guidePaint = Paint()
+      ..color = colorScheme.outlineVariant.withValues(alpha: 0.42)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(10, centerY),
+      Offset(size.width - 10, centerY),
+      guidePaint,
+    );
+
+    _paintWaveform(canvas, size, waveformValues);
+
+    final barCount = spectrumValues.isEmpty
+        ? _fallbackBandCount
+        : spectrumValues.length;
+    final gap = 3.0;
+    final availableWidth = math.max(0.0, size.width - 20);
+    final barWidth = math.max(
+      1.0,
+      (availableWidth - gap * (barCount - 1)) / barCount,
+    );
+    final activePaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [colorScheme.primary, colorScheme.tertiary],
+      ).createShader(rect);
+    final idlePaint = Paint()
+      ..color = colorScheme.onSurfaceVariant.withValues(alpha: 0.20);
+
+    for (var index = 0; index < barCount; index += 1) {
+      final value = spectrumValues.isEmpty ? 0.0 : spectrumValues[index];
+      final shaped = math.pow(value.clamp(0.0, 1.0), 0.72).toDouble();
+      final height = math.max(3.0, shaped * (size.height * 0.56));
+      final left = 10 + index * (barWidth + gap);
+      final top = size.height - 8 - height;
+      final barRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(left, top, barWidth, height),
+        const Radius.circular(2),
+      );
+      canvas.drawRRect(barRect, value > 0.01 ? activePaint : idlePaint);
+    }
+
+    canvas.drawRect(rect.deflate(0.5), borderPaint);
+  }
+
+  void _paintWaveform(Canvas canvas, Size size, List<double> values) {
+    if (values.length < 2) return;
+
+    final path = Path();
+    final left = 10.0;
+    final width = math.max(1.0, size.width - 20);
+    final centerY = size.height * 0.32;
+    final amplitude = size.height * 0.22;
+    for (var index = 0; index < values.length; index += 1) {
+      final x = left + width * index / math.max(1, values.length - 1);
+      final y = centerY - values[index].clamp(-1.0, 1.0) * amplitude;
+      if (index == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final shadowPaint = Paint()
+      ..color = colorScheme.surface.withValues(alpha: 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final wavePaint = Paint()
+      ..color = colorScheme.secondary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(path, shadowPaint);
+    canvas.drawPath(path, wavePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _AudioVisualizationPainter oldDelegate) {
+    return oldDelegate.frame != frame || oldDelegate.colorScheme != colorScheme;
+  }
+}
+
+List<double> _spectrumValues(player.VisualizationFrame? frame) {
+  final values = frame?.normalized;
+  if (values == null || values.isEmpty || frame?.isActive != true) {
+    return const [];
+  }
+
+  return values.map((value) => value.clamp(0.0, 1.0).toDouble()).toList();
+}
+
+List<double> _waveformValues(player.VisualizationFrame? frame) {
+  final values = frame?.waveform;
+  if (values == null || values.isEmpty || frame?.isActive != true) {
+    return const [];
+  }
+
+  return values.map((value) => value.clamp(-1.0, 1.0).toDouble()).toList();
+}
+
+double _metricValue(double? value) {
+  if (value == null || !value.isFinite) return 0;
+  return value.clamp(0.0, 1.0).toDouble();
 }
 
 class _Section extends StatelessWidget {

@@ -1,0 +1,26 @@
+name: Flutter Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-tests:
+    uses: ./.github/workflows/_linux-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: flutter_tests
+    secrets: inherit

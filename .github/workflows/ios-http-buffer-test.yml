@@ -1,0 +1,28 @@
+name: iOS HTTP Buffer Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-http-buffer-test:
+    uses: ./.github/workflows/_ios-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: flutter_test
+      test_file: integration_test/http_buffer_progress_test.dart
+      artifact_name: ios-http-buffer-test-logs
+    secrets: inherit

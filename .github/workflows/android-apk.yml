@@ -1,0 +1,26 @@
+name: Android APK Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-apk:
+    uses: ./.github/workflows/_android-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: apk
+    secrets: inherit

@@ -16,6 +16,10 @@ For iOS SDK, unsigned IPA packaging, simulator integration tests, and true-devic
 
 For HTTP buffering progress semantics, implementation notes, and Linux/Android/iOS verification, see [docs/http-buffer-progress.md](docs/http-buffer-progress.md).
 
+For audio visualization implementation notes and platform verification, see [docs/audio-visualization-plan.md](docs/audio-visualization-plan.md).
+
+For CI, local test entry points, Patrol coverage, SSH/tmate debugging, and the iOS/Android test failure history, see [docs/testing-and-ci-guide.md](docs/testing-and-ci-guide.md).
+
 ## Toolchain
 
 - Flutter SDK used here: `/home/chrome-book/fvm/versions/3.41.6/bin/flutter`
@@ -92,13 +96,27 @@ Android playback test:
 
 ```bash
 cd /home/chrome-book/code/gst_audio_flutter
-mkdir -p test-assets
-gst-launch-1.0 -q audiotestsrc num-buffers=80 wave=sine freq=440 ! audioconvert ! wavenc ! filesink location=test-assets/tone.wav
-python3 -m http.server 8765 --bind 127.0.0.1 --directory test-assets
+python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true' EXIT
 /home/chrome-book/Android/Sdk/platform-tools/adb reverse tcp:8765 tcp:8765
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH \
 GSTREAMER_ROOT_ANDROID=/home/chrome-book/code/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2 \
 flutter test integration_test/android_playback_test.dart -d emulator-5554
+```
+
+Android native media controls and foreground playback test:
+
+```bash
+cd /home/chrome-book/code/gst_audio_flutter
+python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+python3 tool/android_native_audio_e2e.py \
+  --device emulator-5554 \
+  --gstreamer-root-android /home/chrome-book/code/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
 ```
 
 The Android build statically links GLib, GStreamer core libraries, and the selected static plugins into `libgst_audio_core.so`. `readelf -d` should only show Android system dependencies such as `libOpenSLES.so`, `liblog.so`, `libdl.so`, `libm.so`, and `libc.so`.
@@ -109,6 +127,8 @@ The Android build statically links GLib, GStreamer core libraries, and the selec
 - Queue modes: sequential, shuffle, repeat one, repeat all
 - Position: current time, duration, millisecond seek
 - Audio controls: volume, mute, fade in, fade out
+- Audio visualization: realtime `spectrum` FFT bars, GStreamer `level` RMS/peak data, smoothing, beat signal, and PCM waveform rendered in Flutter
+- Native system audio: Android foreground media notification/media buttons and iOS playback audio session/background audio mode
 - Speed: 0.5x, 1x, 1.5x, 2x
 - Output switching: default output or GStreamer `Audio/Sink` devices exposed by the host
 - Local file paths and HTTP/HTTPS URLs are accepted by the queue
@@ -122,6 +142,8 @@ cd rust && cargo check && cargo test
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter analyze
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter test
 PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter build linux
+GST_AUDIO_FLUTTER_AUDIO_SINK=fakesink PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter test integration_test/audio_visualization_test.dart -d linux
+GST_AUDIO_FLUTTER_AUDIO_SINK=fakesink PATH=/home/chrome-book/fvm/versions/3.41.6/bin:$PATH flutter test integration_test/audio_matrix_test.dart -d linux
 ```
 
 Playback smoke test:
@@ -141,8 +163,41 @@ Android commands run successfully in this workspace:
 GSTREAMER_ROOT_ANDROID=/home/chrome-book/code/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2 flutter build apk --debug --target-platform android-x64
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 adb shell am start -W -n com.example.gst_audio_flutter/.MainActivity
+python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+adb reverse tcp:8765 tcp:8765
 flutter test integration_test/android_playback_test.dart -d emulator-5554
 ```
+
+Additional Android native controls E2E entry point:
+
+```bash
+python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+python3 tool/audio_test_server.py --port 8765 --directory test-assets &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+python3 tool/android_native_audio_e2e.py --device emulator-5554 --gstreamer-root-android /home/chrome-book/code/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
+```
+
+iOS is verified through GitHub Actions because this Linux workspace cannot run Xcode or iOS simulators. Latest passing run:
+
+```text
+https://github.com/whale-audio-library/gst_audio_flutter/actions/runs/25431616508
+commit 32ff80675c93d6c4fdade853c69f2cd1dda2256e
+```
+
+That run passed unsigned `iphoneos` Release build, unsigned IPA upload, and these simulator integration tests:
+
+```text
+ios_playback_test.dart: 3 tests
+http_buffer_progress_test.dart: 2 tests
+audio_visualization_test.dart: 2 tests
+audio_matrix_test.dart: 4 tests
+```
+
+The current iOS workflow also runs `ios/RunnerTests/RunnerTests.swift` with `xcodebuild test` before the Flutter integration tests. Those XCTest checks cover `UIBackgroundModes=audio` and `AVAudioSession` playback category.
 
 ## Notes
 

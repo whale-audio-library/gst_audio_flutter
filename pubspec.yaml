@@ -37,6 +37,8 @@ dependencies:
   gst_audio_core:
     path: rust_builder
   flutter_rust_bridge: 2.11.1
+  audio_service: ^0.18.18
+  audio_session: ^0.2.3
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +52,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   integration_test:
     sdk: flutter
+  patrol: ^4.5.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -63,10 +66,17 @@ flutter:
   uses-material-design: true
 
   assets:
+    - test-assets/long-30s.wav
     - test-assets/tone.wav
     - test-assets/formats/tone.flac
     - test-assets/formats/tone-vorbis.ogg
     - test-assets/formats/tone-opus.ogg
+
+patrol:
+  android:
+    package_name: com.example.gst_audio_flutter
+  ios:
+    bundle_id: com.example.gstAudioFlutter
 
   # To add assets to your application, add an assets section, like this:
   # assets:

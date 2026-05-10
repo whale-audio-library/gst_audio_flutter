@@ -1,0 +1,26 @@
+name: Linux Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-build:
+    uses: ./.github/workflows/_linux-workflow.yml
+    permissions:
+      contents: read
+    with:
+      task: linux_build
+    secrets: inherit
