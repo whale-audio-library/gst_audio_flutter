@@ -159,6 +159,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       GSTREAMER_VERSION: 1.28.2
       GSTREAMER_SHA256: ba9f1c6e10f0736fbf48cd741634fa90e49d50c961a4454230040b2517490d2a
       GSTREAMER_ROOT_ANDROID: ${{ github.workspace }}/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
@@ -251,6 +253,8 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       GSTREAMER_VERSION: 1.28.2
       GSTREAMER_SHA256: ba9f1c6e10f0736fbf48cd741634fa90e49d50c961a4454230040b2517490d2a
       GSTREAMER_ROOT_ANDROID: ${{ github.workspace }}/.cache/gstreamer-android/gstreamer-1.0-android-universal-1.28.2
