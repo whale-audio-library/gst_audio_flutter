@@ -8,9 +8,17 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      debug_tmate:
+        description: Open a tmate SSH session for live debugging
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -77,6 +85,53 @@ jobs:
 
       - name: Generate integration audio fixtures
         run: python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+
+      - name: Setup tmate session
+        id: tmate
+        if: ${{ github.event.inputs.debug_tmate == 'true' }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+          limit-access-to-actor: true
+
+      - name: Publish tmate connection details
+        if: ${{ github.event.inputs.debug_tmate == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TMATE_SSH_COMMAND: ${{ steps.tmate.outputs['ssh-command'] }}
+          TMATE_WEB_URL: ${{ steps.tmate.outputs['web-url'] }}
+        run: |
+          set -euo pipefail
+          branch_name="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          connection_dir="$RUNNER_TEMP/tmate-connection"
+          mkdir -p "$connection_dir"
+          connection_file="$connection_dir/connection.txt"
+
+          {
+            echo "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "SSH: ${TMATE_SSH_COMMAND}"
+            if [[ -n "${TMATE_WEB_URL}" ]]; then
+              echo "Web: ${TMATE_WEB_URL}"
+            fi
+          } | tee "$connection_file"
+
+          pr_number="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$branch_name" \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+
+          if [[ -n "$pr_number" ]]; then
+            comment_body=$'CI tmate debug session is ready.\n\n```bash\n'
+            comment_body+="${TMATE_SSH_COMMAND}"
+            comment_body+=$'\n```\n\nRun: '
+            comment_body+="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            gh pr comment "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "$comment_body"
+          fi
 
       - name: Run Linux audio visualization integration test
         run: |
@@ -272,6 +327,53 @@ jobs:
 
       - name: Generate integration audio fixtures
         run: python3 tool/generate_test_audio_assets.py --output-dir test-assets/generated
+
+      - name: Setup tmate session
+        id: tmate
+        if: ${{ github.event.inputs.debug_tmate == 'true' }}
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: true
+          limit-access-to-actor: true
+
+      - name: Publish tmate connection details
+        if: ${{ github.event.inputs.debug_tmate == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TMATE_SSH_COMMAND: ${{ steps.tmate.outputs['ssh-command'] }}
+          TMATE_WEB_URL: ${{ steps.tmate.outputs['web-url'] }}
+        run: |
+          set -euo pipefail
+          branch_name="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          connection_dir="$RUNNER_TEMP/tmate-connection"
+          mkdir -p "$connection_dir"
+          connection_file="$connection_dir/connection.txt"
+
+          {
+            echo "Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "SSH: ${TMATE_SSH_COMMAND}"
+            if [[ -n "${TMATE_WEB_URL}" ]]; then
+              echo "Web: ${TMATE_WEB_URL}"
+            fi
+          } | tee "$connection_file"
+
+          pr_number="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$branch_name" \
+              --json number \
+              --jq '.[0].number // empty'
+          )"
+
+          if [[ -n "$pr_number" ]]; then
+            comment_body=$'CI tmate debug session is ready.\n\n```bash\n'
+            comment_body+="${TMATE_SSH_COMMAND}"
+            comment_body+=$'\n```\n\nRun: '
+            comment_body+="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            gh pr comment "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "$comment_body"
+          fi
 
       - name: Run Android Patrol native audio test
         uses: reactivecircus/android-emulator-runner@v2
