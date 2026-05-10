@@ -260,11 +260,49 @@ jobs:
             echo "Audio test server did not become ready"
             exit 1
           fi
+
+          terminate_runner() {
+            xcrun simctl terminate "$IOS_SIMULATOR_ID" com.example.gstAudioFlutter >/dev/null 2>&1 || true
+          }
+
+          timeout_seconds=1800
+          elapsed=0
+          status=0
+
+          terminate_runner
+          set +e
           GSTREAMER_IOS_LIBRARY_DIR="$GSTREAMER_IOS_SIMULATOR_LIBRARY_DIR" \
             flutter test "${{ inputs.test_file }}" \
               -d "$IOS_SIMULATOR_NAME" \
               --reporter expanded \
-              > >(tee "$IOS_LOG_DIR/flutter-test.log") 2>&1
+              > >(tee "$IOS_LOG_DIR/flutter-test.log") 2>&1 &
+          flutter_pid="$!"
+
+          while kill -0 "$flutter_pid" 2>/dev/null; do
+            if [[ "$elapsed" -ge "$timeout_seconds" ]]; then
+              echo "Timed out after ${timeout_seconds} seconds" | tee -a "$IOS_LOG_DIR/flutter-test.log"
+              terminate_runner
+              pkill -TERM -P "$flutter_pid" >/dev/null 2>&1 || true
+              kill -TERM "$flutter_pid" >/dev/null 2>&1 || true
+              sleep 5
+              pkill -KILL -P "$flutter_pid" >/dev/null 2>&1 || true
+              kill -KILL "$flutter_pid" >/dev/null 2>&1 || true
+              status=124
+              break
+            fi
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+
+          if [[ "$status" -eq 0 ]]; then
+            wait "$flutter_pid"
+            status="$?"
+          else
+            wait "$flutter_pid" >/dev/null 2>&1 || true
+          fi
+          set -e
+          terminate_runner
+          exit "$status"
 
       - name: Collect iOS logs
         if: ${{ always() && inputs.task != 'package' }}
