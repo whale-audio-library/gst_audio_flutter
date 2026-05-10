@@ -1,6 +1,18 @@
 name: SSH Debug
 
 on:
+  workflow_run:
+    workflows:
+      - Android Patrol Native Audio Test
+      - iOS Playback Test
+      - iOS HTTP Buffer Test
+      - iOS Audio Matrix Test
+      - iOS Audio Visualization Test
+      - iOS Patrol Native Audio Test
+      - iOS Runner Tests
+      - iOS Build
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       target:
@@ -21,7 +33,7 @@ concurrency:
 
 jobs:
   ubuntu-ssh:
-    if: ${{ github.event.inputs.target == 'ubuntu' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'ubuntu') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && startsWith(github.event.workflow_run.name, 'Android')) }}
     name: Ubuntu SSH session
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -36,6 +48,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Install Ubuntu debug dependencies
         run: |
@@ -116,7 +130,7 @@ jobs:
           done
 
   ios-ssh:
-    if: ${{ github.event.inputs.target == 'ios' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'ios') || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && startsWith(github.event.workflow_run.name, 'iOS')) }}
     name: iOS SSH session
     runs-on: macos-latest
     timeout-minutes: 120
@@ -128,6 +142,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
