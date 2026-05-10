@@ -85,9 +85,17 @@ jobs:
         run: flutter pub get
 
       - name: Open SSH session
+        id: tmate
         uses: mxschmitt/action-tmate@v3
         with:
+          detached: true
           limit-access-to-actor: true
+
+      - name: Print SSH connection details
+        run: |
+          echo "SSH: ${{ steps.tmate.outputs['ssh-command'] }}"
+          echo "WEB: ${{ steps.tmate.outputs['web-url'] }}"
+          sleep 7200
 
   ios-ssh:
     if: ${{ github.event.inputs.target == 'ios' }}
@@ -126,6 +134,14 @@ jobs:
         run: flutter pub get
 
       - name: Open SSH session
+        id: tmate
         uses: mxschmitt/action-tmate@v3
         with:
+          detached: true
           limit-access-to-actor: true
+
+      - name: Print SSH connection details
+        run: |
+          echo "SSH: ${{ steps.tmate.outputs['ssh-command'] }}"
+          echo "WEB: ${{ steps.tmate.outputs['web-url'] }}"
+          sleep 7200
