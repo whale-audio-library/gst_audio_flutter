@@ -123,28 +123,11 @@ Future<void> _assertAndroidMediaNotification(PatrolIntegrationTester $) async {
 
   await $.platform.mobile.openNotifications();
   await Future<void>.delayed(const Duration(seconds: 2));
-
-  final notifications = await $.platform.mobile.getNotifications();
-  final mediaNotificationVisible = notifications.any((notification) {
-    final combined = [
-      notification.appName,
-      notification.title,
-      notification.content,
-      notification.raw,
-    ].whereType<String>().join('\n');
-    return combined.contains('gst_audio_flutter') ||
-        combined.contains('Audio playback') ||
-        combined.contains(activeNotification.title ?? '') ||
-        combined.contains('127.0.0.1');
-  });
-
-  if (!mediaNotificationVisible) {
-    // Some emulator system images expose media controls through the media
-    // session surface while omitting them from Patrol's notification text dump.
-    // The active notification query above is the authoritative app-process
-    // check that the foreground media notification was actually posted.
-    // Opening the shade still exercises the native notification UI path.
-  }
+  // Some emulator images hang when Patrol tries to dump notification text.
+  // The active notification query above is the authoritative assertion that the
+  // foreground media notification was posted; opening the shade still exercises
+  // the native notification UI path without depending on Patrol text scraping.
+  expect(activeNotification.isAudioServiceNotification, isTrue);
   await $.platform.mobile.closeNotifications();
 }
 
