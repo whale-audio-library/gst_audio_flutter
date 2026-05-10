@@ -54,7 +54,7 @@ jobs:
         run: flutter pub get
 
       - name: Get cargokit build tool dependencies
-        if: ${{ inputs.task == 'linux_build' || inputs.task == 'linux_audio_visualization' }}
+        if: ${{ inputs.task == 'flutter_analyze' || inputs.task == 'linux_build' || inputs.task == 'linux_audio_visualization' }}
         run: dart pub get
         working-directory: rust_builder/cargokit/build_tool
 
