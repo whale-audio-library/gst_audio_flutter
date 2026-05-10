@@ -106,9 +106,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/tmate"
           socket="$RUNNER_TEMP/tmate/runner.sock"
           tmate -S "$socket" new-session -d
-          tmate -S "$socket" wait tmate-ready
-          ssh_command="$(tmate -S "$socket" display -p '#{tmate_ssh}')"
-          web_url="$(tmate -S "$socket" display -p '#{tmate_web}')"
+          ssh_command=""
+          web_url=""
+          for _ in {1..60}; do
+            ssh_command="$(tmate -S "$socket" display -p '#{tmate_ssh}' 2>/dev/null || true)"
+            web_url="$(tmate -S "$socket" display -p '#{tmate_web}' 2>/dev/null || true)"
+            if [[ -n "$ssh_command" && -n "$web_url" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          if [[ -z "$ssh_command" || -z "$web_url" ]]; then
+            echo "tmate session did not become ready"
+            exit 1
+          fi
           {
             echo "SSH=${ssh_command}"
             echo "WEB=${web_url}"
@@ -177,9 +188,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/tmate"
           socket="$RUNNER_TEMP/tmate/runner.sock"
           tmate -S "$socket" new-session -d
-          tmate -S "$socket" wait tmate-ready
-          ssh_command="$(tmate -S "$socket" display -p '#{tmate_ssh}')"
-          web_url="$(tmate -S "$socket" display -p '#{tmate_web}')"
+          ssh_command=""
+          web_url=""
+          for _ in {1..60}; do
+            ssh_command="$(tmate -S "$socket" display -p '#{tmate_ssh}' 2>/dev/null || true)"
+            web_url="$(tmate -S "$socket" display -p '#{tmate_web}' 2>/dev/null || true)"
+            if [[ -n "$ssh_command" && -n "$web_url" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          if [[ -z "$ssh_command" || -z "$web_url" ]]; then
+            echo "tmate session did not become ready"
+            exit 1
+          fi
           {
             echo "SSH=${ssh_command}"
             echo "WEB=${web_url}"
